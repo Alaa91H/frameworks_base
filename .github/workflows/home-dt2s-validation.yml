@@ -12,6 +12,9 @@ on:
       - "packages/SettingsProvider/src/android/provider/settings/validators/SecureSettingsValidators.java"
       - "packages/SystemUI/src/com/android/systemui/axdynamicbar/data/source/SystemIslandManager.kt"
       - "packages/SystemUI/src/com/android/systemui/qrcodescanner/controller/QRCodeScannerController.java"
+      - "packages/SystemUI/src/com/android/systemui/edgelight/EdgeLightSettingsRepository.kt"
+      - "packages/SystemUI/src/com/android/systemui/edgelight/EdgeLightView.kt"
+      - "packages/SystemUI/src/com/android/systemui/edgelight/EdgeLightViewController.kt"
       - "services/core/java/com/android/server/wm/Session.java"
       - "services/core/java/com/android/server/wm/WindowManagerService.java"
       - "services/core/java/com/android/server/wm/WindowState.java"
@@ -45,6 +48,9 @@ jobs:
             packages/SettingsProvider/src/android/provider/settings/validators/SecureSettingsValidators.java
             packages/SystemUI/src/com/android/systemui/axdynamicbar/data/source/SystemIslandManager.kt
             packages/SystemUI/src/com/android/systemui/qrcodescanner/controller/QRCodeScannerController.java
+            packages/SystemUI/src/com/android/systemui/edgelight/EdgeLightSettingsRepository.kt
+            packages/SystemUI/src/com/android/systemui/edgelight/EdgeLightView.kt
+            packages/SystemUI/src/com/android/systemui/edgelight/EdgeLightViewController.kt
             services/core/java/com/android/server/wm/Session.java
             services/core/java/com/android/server/wm/WindowManagerService.java
             services/core/java/com/android/server/wm/WindowState.java
