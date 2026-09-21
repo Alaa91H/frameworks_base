@@ -49,6 +49,7 @@ constructor(
     private val indicationAreaViewId = R.id.keyguard_indication_area
     private var indicationAreaHandle: DisposableHandle? = null
     private var tunerRegistered = false
+    private var registeringTunables = false
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         val view = KeyguardIndicationArea(context, null)
@@ -57,12 +58,14 @@ constructor(
 
     override fun bindData(constraintLayout: ConstraintLayout) {
         if (!tunerRegistered) {
+            tunerRegistered = true
+            registeringTunables = true
             tunerService.addTunable(
                 this,
                 INDICATION_VERTICAL_OFFSET_KEY,
                 INDICATION_HORIZONTAL_INSET_KEY,
             )
-            tunerRegistered = true
+            registeringTunables = false
         }
 
         indicationAreaHandle =
@@ -74,7 +77,9 @@ constructor(
     }
 
     override fun onTuningChanged(key: String?, newValue: String?) {
-        if (key == INDICATION_VERTICAL_OFFSET_KEY || key == INDICATION_HORIZONTAL_INSET_KEY) {
+        if (!registeringTunables &&
+            (key == INDICATION_VERTICAL_OFFSET_KEY || key == INDICATION_HORIZONTAL_INSET_KEY)
+        ) {
             keyguardBlueprintInteractor
                 .get()
                 .refreshBlueprint(IntraBlueprintTransition.Type.DefaultTransition)
