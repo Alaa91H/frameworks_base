@@ -152,21 +152,47 @@ final class BatterySaverCustomActions extends ContentObserver {
         apply();
     }
 
+    void reapplyCpuLimit() {
+        updateCpuLimit(getCpuLimitOverride());
+    }
+
     @Override
     public void onChange(boolean selfChange) {
         apply();
     }
 
-    private void apply() {
-        final int cpuLimitPercent = mFullBatterySaverEnabled
-                ? Settings.Global.getInt(mResolver, SETTING_CPU_LIMIT_PERCENT, -1) : -1;
-        final boolean disable5g = mFullBatterySaverEnabled
-                && Settings.Global.getInt(mResolver, SETTING_DISABLE_5G, 0) != 0;
-        final int screenTimeoutMs = getScreenTimeoutOverride();
+    @Override
+    public void onChange(boolean selfChange, android.net.Uri uri) {
+        if (uri == null) {
+            apply();
+            return;
+        }
 
-        updateCpuLimit(cpuLimitPercent);
-        update5g(disable5g);
-        updateScreenTimeout(screenTimeoutMs);
+        if (Settings.Global.getUriFor(SETTING_CPU_LIMIT_PERCENT).equals(uri)) {
+            updateCpuLimit(getCpuLimitOverride());
+        } else if (Settings.Global.getUriFor(SETTING_DISABLE_5G).equals(uri)) {
+            update5g(getDisable5gOverride());
+        } else if (Settings.Global.getUriFor(SETTING_SCREEN_TIMEOUT).equals(uri)) {
+            updateScreenTimeout(getScreenTimeoutOverride());
+        } else {
+            apply();
+        }
+    }
+
+    private void apply() {
+        updateCpuLimit(getCpuLimitOverride());
+        update5g(getDisable5gOverride());
+        updateScreenTimeout(getScreenTimeoutOverride());
+    }
+
+    private int getCpuLimitOverride() {
+        return mFullBatterySaverEnabled
+                ? Settings.Global.getInt(mResolver, SETTING_CPU_LIMIT_PERCENT, -1) : -1;
+    }
+
+    private boolean getDisable5gOverride() {
+        return mFullBatterySaverEnabled
+                && Settings.Global.getInt(mResolver, SETTING_DISABLE_5G, 0) != 0;
     }
 
     private int getScreenTimeoutOverride() {
