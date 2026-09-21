@@ -72,6 +72,8 @@ public final class FaceUnlockScanEffectView extends View {
 
     @Nullable private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     @Nullable private ValueAnimator mAnimator;
+    @Nullable private Shader mLeftShader;
+    @Nullable private Shader mRightShader;
 
     private boolean mSettingEnabled;
     private boolean mFaceRunning;
@@ -356,6 +358,14 @@ public final class FaceUnlockScanEffectView extends View {
 
         mGeometryValid = mLeftMeasure.getLength() >= dp(18f)
                 && mRightMeasure.getLength() >= dp(18f);
+
+        if (mGeometryValid) {
+            mLeftShader = createWingShader(mLeftOuterX, mLeftInnerX);
+            mRightShader = createWingShader(mRightOuterX, mRightInnerX);
+        } else {
+            mLeftShader = null;
+            mRightShader = null;
+        }
         invalidate();
     }
 
@@ -375,6 +385,22 @@ public final class FaceUnlockScanEffectView extends View {
             }
         }
         return best == null ? null : new Rect(best);
+    }
+
+    private Shader createWingShader(float outerX, float innerX) {
+        return new LinearGradient(
+                outerX,
+                mCenterY,
+                innerX,
+                mCenterY,
+                new int[] {
+                        Color.TRANSPARENT,
+                        withAlpha(COLOR_BLUE, 190),
+                        withAlpha(COLOR_CYAN, 255),
+                        withAlpha(COLOR_WHITE, 255)
+                },
+                new float[] {0f, 0.38f, 0.78f, 1f},
+                Shader.TileMode.CLAMP);
     }
 
     private void buildWing(Path path, float outerX, float innerX, float centerY, boolean left) {
@@ -414,36 +440,12 @@ public final class FaceUnlockScanEffectView extends View {
         final float pulse = 0.68f
                 + 0.32f * (float) Math.sin(mProgress * Math.PI * 2.0);
 
-        final Shader leftShader = new LinearGradient(
-                mLeftOuterX,
-                mCenterY,
-                mLeftInnerX,
-                mCenterY,
-                new int[] {
-                        Color.TRANSPARENT,
-                        withAlpha(COLOR_BLUE, 190),
-                        withAlpha(COLOR_CYAN, 255),
-                        withAlpha(COLOR_WHITE, 255)
-                },
-                new float[] {0f, 0.38f, 0.78f, 1f},
-                Shader.TileMode.CLAMP);
+        if (mLeftShader == null || mRightShader == null) {
+            return;
+        }
 
-        final Shader rightShader = new LinearGradient(
-                mRightOuterX,
-                mCenterY,
-                mRightInnerX,
-                mCenterY,
-                new int[] {
-                        Color.TRANSPARENT,
-                        withAlpha(COLOR_BLUE, 190),
-                        withAlpha(COLOR_CYAN, 255),
-                        withAlpha(COLOR_WHITE, 255)
-                },
-                new float[] {0f, 0.38f, 0.78f, 1f},
-                Shader.TileMode.CLAMP);
-
-        drawWing(canvas, mLeftWing, leftShader, pulse);
-        drawWing(canvas, mRightWing, rightShader, pulse);
+        drawWing(canvas, mLeftWing, mLeftShader, pulse);
+        drawWing(canvas, mRightWing, mRightShader, pulse);
         drawCameraRails(canvas, pulse);
 
         drawTracer(canvas, mLeftMeasure, mProgress);
