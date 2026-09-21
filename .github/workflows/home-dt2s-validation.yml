@@ -1,0 +1,45 @@
+name: Home DT2S validation
+
+on:
+  pull_request:
+    branches:
+      - cnb
+    paths:
+      - "core/java/android/provider/Settings.java"
+      - "packages/SettingsProvider/src/android/provider/settings/backup/SecureSettings.java"
+      - "packages/SettingsProvider/src/android/provider/settings/validators/SecureSettingsValidators.java"
+      - "services/core/java/com/android/server/wm/Session.java"
+      - "tools/validate_home_dt2s.py"
+      - ".github/workflows/home-dt2s-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Native Home DT2S release checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout only DT2S integration files
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          filter: blob:none
+          sparse-checkout: |
+            core/java/android/provider/Settings.java
+            packages/SettingsProvider/src/android/provider/settings/backup/SecureSettings.java
+            packages/SettingsProvider/src/android/provider/settings/validators/SecureSettingsValidators.java
+            services/core/java/com/android/server/wm/Session.java
+            tools/validate_home_dt2s.py
+
+      - name: Validate Python checker
+        run: python3 -m py_compile tools/validate_home_dt2s.py
+
+      - name: Validate native Home double tap to sleep
+        run: python3 tools/validate_home_dt2s.py
+
+      - name: Check patch whitespace
+        run: git diff --check HEAD^ HEAD
