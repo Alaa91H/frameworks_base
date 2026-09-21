@@ -29,6 +29,7 @@ import com.android.systemui.keyguard.ui.viewmodel.KeyguardClockViewModel
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.res.R
 import com.android.systemui.shared.R as sharedR
+import com.android.systemui.tuner.TunerService
 import javax.inject.Inject
 
 class InfoWidgetsSection
@@ -36,9 +37,13 @@ class InfoWidgetsSection
 constructor(
     private val context: Context,
     private val keyguardClockViewModel: KeyguardClockViewModel,
-) : KeyguardSection() {
+    private val tunerService: TunerService,
+) : KeyguardSection(), TunerService.Tunable {
     
     private var infoWidgetsView: View? = null
+    private var horizontalOffsetDp = 0
+    private var verticalOffsetDp = 0
+    private var tunerRegistered = false
     
     override fun addViews(constraintLayout: ConstraintLayout) {
         
@@ -62,6 +67,12 @@ constructor(
     }
     
     override fun bindData(constraintLayout: ConstraintLayout) {
+        if (!tunerRegistered) {
+            tunerService.addTunable(this, INFO_OFFSET_X_KEY, INFO_OFFSET_Y_KEY)
+            tunerRegistered = true
+        }
+        applyPositionOffsets()
+
         // ProgressImageView components handle their own data binding
         infoWidgetsView?.let { view ->
             keyguardClockViewModel.burnInLayer?.apply {
@@ -71,6 +82,26 @@ constructor(
         }
     }
     
+    override fun onTuningChanged(key: String?, newValue: String?) {
+        when (key) {
+            INFO_OFFSET_X_KEY -> {
+                horizontalOffsetDp =
+                    TunerService.parseInteger(newValue, 0).coerceIn(MIN_OFFSET_DP, MAX_OFFSET_DP)
+            }
+            INFO_OFFSET_Y_KEY -> {
+                verticalOffsetDp =
+                    TunerService.parseInteger(newValue, 0).coerceIn(MIN_OFFSET_DP, MAX_OFFSET_DP)
+            }
+        }
+        applyPositionOffsets()
+    }
+
+    private fun applyPositionOffsets() {
+        val density = context.resources.displayMetrics.density
+        infoWidgetsView?.translationX = horizontalOffsetDp * density
+        infoWidgetsView?.translationY = verticalOffsetDp * density
+    }
+
     override fun applyConstraints(constraintSet: ConstraintSet) {
 
         constraintSet.apply {
@@ -107,6 +138,11 @@ constructor(
     }
     
     override fun removeViews(constraintLayout: ConstraintLayout) {
+        if (tunerRegistered) {
+            tunerService.removeTunable(this)
+            tunerRegistered = false
+        }
+
         infoWidgetsView?.let { view ->
             keyguardClockViewModel.burnInLayer?.apply {
                 removeView(view)
@@ -115,5 +151,12 @@ constructor(
             (view.parent as? ViewGroup)?.removeView(view)
         }
         infoWidgetsView = null
+    }
+
+    companion object {
+        private const val INFO_OFFSET_X_KEY = "lockscreen_info_widgets_offset_x"
+        private const val INFO_OFFSET_Y_KEY = "lockscreen_info_widgets_offset_y"
+        private const val MIN_OFFSET_DP = -200
+        private const val MAX_OFFSET_DP = 200
     }
 }
