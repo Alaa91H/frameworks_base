@@ -134,6 +134,7 @@ private val TileViewModel.traceName
  * @param detailsViewModel An optional [DetailsViewModel] used to handle navigation to a detailed
  *   view when a tile is clicked, if applicable.
  * @param enableRevealEffect If `true`, the tiles will animate using the reveal animation.
+ * @param useAlternateTileColor Use the alternate neutral QS surface color.
  */
 @Composable
 fun ContentScope.Tile(
@@ -148,6 +149,7 @@ fun ContentScope.Tile(
     requestToggleTextFeedback: (TileSpec) -> Unit = {},
     detailsViewModel: DetailsViewModel?,
     enableRevealEffect: Boolean = false,
+    useAlternateTileColor: Boolean = false,
 ) {
     trace(tile.traceName) {
         val currentBounceableInfo by rememberUpdatedState(bounceableInfo)
@@ -169,7 +171,7 @@ fun ContentScope.Tile(
                 tile.state.collect { value = it.toIconProvider() }
             }
 
-        val colors = TileDefaults.getColorForState(uiState, iconOnly)
+        val colors = TileDefaults.getColorForState(uiState, iconOnly, useAlternateTileColor)
         val hapticsViewModel: TileHapticsViewModel =
             rememberViewModel(traceName = "TileHapticsViewModel") {
                 tileHapticsViewModelFactory.create(tile)
@@ -538,9 +540,9 @@ private object TileDefaults {
     /** An active tile with dual target only show the active color on the icon */
     @Composable
     @ReadOnlyComposable
-    fun activeDualTargetTileColors(): TileColors =
+    fun activeDualTargetTileColors(useAlternateTileColor: Boolean): TileColors =
         TileColors(
-            background = LocalAndroidColorScheme.current.surfaceEffect1,
+            background = neutralTileColor(useAlternateTileColor),
             iconBackground = MaterialTheme.colorScheme.primary,
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
@@ -549,9 +551,9 @@ private object TileDefaults {
 
     @Composable
     @ReadOnlyComposable
-    fun inactiveDualTargetTileColors(): TileColors =
+    fun inactiveDualTargetTileColors(useAlternateTileColor: Boolean): TileColors =
         TileColors(
-            background = LocalAndroidColorScheme.current.surfaceEffect1,
+            background = neutralTileColor(useAlternateTileColor),
             iconBackground = LocalAndroidColorScheme.current.surfaceEffect2,
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
@@ -560,9 +562,9 @@ private object TileDefaults {
 
     @Composable
     @ReadOnlyComposable
-    fun inactiveTileColors(): TileColors =
+    fun inactiveTileColors(useAlternateTileColor: Boolean): TileColors =
         TileColors(
-            background = LocalAndroidColorScheme.current.surfaceEffect1,
+            background = neutralTileColor(useAlternateTileColor),
             iconBackground = Color.Transparent,
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
@@ -585,11 +587,15 @@ private object TileDefaults {
 
     @Composable
     @ReadOnlyComposable
-    fun getColorForState(uiState: TileUiState, iconOnly: Boolean): TileColors {
+    fun getColorForState(
+        uiState: TileUiState,
+        iconOnly: Boolean,
+        useAlternateTileColor: Boolean = false,
+    ): TileColors {
         return when (uiState.visualState) {
             STATE_ACTIVE -> {
                 if (uiState.handlesToggleClick && !iconOnly) {
-                    activeDualTargetTileColors()
+                    activeDualTargetTileColors(useAlternateTileColor)
                 } else {
                     activeTileColors()
                 }
@@ -597,15 +603,24 @@ private object TileDefaults {
 
             STATE_INACTIVE -> {
                 if (uiState.handlesToggleClick && !iconOnly) {
-                    inactiveDualTargetTileColors()
+                    inactiveDualTargetTileColors(useAlternateTileColor)
                 } else {
-                    inactiveTileColors()
+                    inactiveTileColors(useAlternateTileColor)
                 }
             }
 
             else -> unavailableTileColors()
         }
     }
+
+    @Composable
+    @ReadOnlyComposable
+    private fun neutralTileColor(useAlternateTileColor: Boolean): Color =
+        if (useAlternateTileColor) {
+            LocalAndroidColorScheme.current.surfaceEffect2
+        } else {
+            LocalAndroidColorScheme.current.surfaceEffect1
+        }
 
     @Composable
     fun iconRadius(uiState: TileUiState): Dp {
