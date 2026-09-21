@@ -730,9 +730,10 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
                 if (windowState == null) return;
                 WallpaperController wallpaperController =
                         windowState.getDisplayContent().mWallpaperController;
-                if (mCanAlwaysUpdateWallpaper
-                        || windowState == wallpaperController.getWallpaperTarget()) {
-                    if (isWallpaperTap) {
+                final boolean isActiveWallpaperTarget =
+                        windowState == wallpaperController.getWallpaperTarget();
+                if (mCanAlwaysUpdateWallpaper || isActiveWallpaperTarget) {
+                    if (isWallpaperTap && isActiveWallpaperTarget) {
                         shouldSleep = shouldSleepOnWallpaperTap(
                                 windowState, doubleTapToSleepEnabled, x, y);
                     }

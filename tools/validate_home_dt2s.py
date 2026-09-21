@@ -20,14 +20,43 @@ texts = {
 
 checks = []
 
+
 def require(file_name: str, needle: str, description: str) -> None:
     checks.append((needle in texts[file_name], description, file_name))
+
 
 def require_count(file_name: str, needle: str, expected: int, description: str) -> None:
     count = texts[file_name].count(needle)
     checks.append(
         (count == expected, f"{description} (found {count}, expected {expected})", file_name)
     )
+
+
+def braced_range(text: str, anchor: str) -> tuple[int, int]:
+    """Return the inclusive range of the first braced block following anchor."""
+    anchor_pos = text.find(anchor)
+    if anchor_pos < 0:
+        raise ValueError(f"Anchor not found: {anchor}")
+    open_pos = text.find("{", anchor_pos)
+    if open_pos < 0:
+        raise ValueError(f"Opening brace not found after: {anchor}")
+
+    depth = 0
+    for pos in range(open_pos, len(text)):
+        ch = text[pos]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return open_pos, pos
+    raise ValueError(f"Unbalanced block after: {anchor}")
+
+
+def braced_block(text: str, anchor: str) -> str:
+    start, end = braced_range(text, anchor)
+    return text[start + 1 : end]
+
 
 require_count(
     "Settings.java",
@@ -46,56 +75,115 @@ require(
     "Home DT2S restore values are boolean-validated",
 )
 
-session_checks = [
-    ("WallpaperManager.COMMAND_TAP.equals(action)", "Only semantic wallpaper taps are considered"),
-    ("Settings.Secure.HOME_DOUBLE_TAP_TO_SLEEP", "Session reads the dedicated Home setting"),
-    ("UserHandle.getUserId(mUid)", "Setting is resolved for the calling user's profile"),
-    ("windowState == wallpaperController.getWallpaperTarget()", "Source must be the active wallpaper target"),
-    ("windowState.getActivityType() != ACTIVITY_TYPE_HOME", "Source activity must be HOME"),
-    ("windowState.getDisplayId() != DEFAULT_DISPLAY", "Gesture is limited to the default display"),
-    ("!mService.mPowerManager.isInteractive()", "Device must be interactive"),
-    (
-        "mService.mAtmService.mKeyguardController.isKeyguardShowing(DEFAULT_DISPLAY)",
-        "Gesture is blocked while keyguard is showing",
-    ),
-    ("ViewConfiguration.getDoubleTapTimeout()", "Android double-tap timeout is reused"),
-    ("ViewConfiguration.getDoubleTapMinTime()", "Android double-tap minimum time is reused"),
-    ("getScaledDoubleTapSlop()", "Android density-aware double-tap slop is reused"),
-    (
-        "wallpaperController.sendWindowWallpaperCommandUnchecked(",
-        "Original wallpaper command is still forwarded",
-    ),
-    (
-        "mService.mPowerManager.goToSleep(SystemClock.uptimeMillis())",
-        "Sleep is performed through the native PowerManager path",
-    ),
-]
-for needle, description in session_checks:
-    require("Session.java", needle, description)
-
 session = texts["Session.java"]
-checks.append(
-    (
-        session.index("if (shouldSleep)") > session.index("synchronized (mService.mGlobalLock)"),
-        "PowerManager sleep path is executed after the WindowManager global-lock section",
-        "Session.java",
+try:
+    send_method = braced_block(
+        session,
+        "public void sendWallpaperCommand(IBinder window, String action, int x, int y,",
     )
+    helper_method = braced_block(session, "private boolean shouldSleepOnWallpaperTap(")
+    lock_start, lock_end = braced_range(
+        send_method, "synchronized (mService.mGlobalLock)"
+    )
+
+    scoped_checks = [
+        (
+            "WallpaperManager.COMMAND_TAP.equals(action)" in send_method,
+            "Only semantic wallpaper taps are considered",
+        ),
+        (
+            "Settings.Secure.HOME_DOUBLE_TAP_TO_SLEEP" in send_method,
+            "Session reads the dedicated Home setting",
+        ),
+        (
+            "UserHandle.getUserId(mUid)" in send_method,
+            "Setting is resolved for the calling user's profile",
+        ),
+        (
+            "final boolean isActiveWallpaperTarget =" in send_method
+            and "windowState == wallpaperController.getWallpaperTarget()" in send_method,
+            "The active wallpaper target is resolved explicitly",
+        ),
+        (
+            "if (mCanAlwaysUpdateWallpaper || isActiveWallpaperTarget)" in send_method,
+            "Privileged wallpaper commands keep their existing forwarding behavior",
+        ),
+        (
+            "if (isWallpaperTap && isActiveWallpaperTarget)" in send_method,
+            "Home DT2S is gated to taps from the active wallpaper target",
+        ),
+        (
+            "wallpaperController.sendWindowWallpaperCommandUnchecked(" in send_method,
+            "Original wallpaper command is still forwarded",
+        ),
+        (
+            "mService.mPowerManager.goToSleep(SystemClock.uptimeMillis())" in send_method,
+            "Sleep is performed through the native PowerManager path",
+        ),
+        (
+            send_method.count("mService.mPowerManager.goToSleep(") == 1,
+            "Wallpaper command path has exactly one sleep call",
+        ),
+        (
+            send_method.find("if (shouldSleep)") > lock_end,
+            "PowerManager sleep path is executed after the WindowManager global-lock block",
+        ),
+        (
+            "mService.mPowerManager.goToSleep(" not in send_method[lock_start : lock_end + 1],
+            "No PowerManager sleep call occurs while holding the WindowManager global lock",
+        ),
+    ]
+    for ok, description in scoped_checks:
+        checks.append((ok, description, "Session.java"))
+
+    helper_checks = [
+        (
+            "windowState.getDisplayId() != DEFAULT_DISPLAY" in helper_method,
+            "Gesture is limited to the default display",
+        ),
+        (
+            "windowState.getActivityType() != ACTIVITY_TYPE_HOME" in helper_method,
+            "Source activity must be HOME",
+        ),
+        (
+            "!mService.mPowerManager.isInteractive()" in helper_method,
+            "Device must be interactive",
+        ),
+        (
+            "mService.mAtmService.mKeyguardController.isKeyguardShowing(DEFAULT_DISPLAY)"
+            in helper_method,
+            "Gesture is blocked while keyguard is showing",
+        ),
+        (
+            "elapsed >= DOUBLE_TAP_MIN_TIME_MS" in helper_method
+            and "elapsed <= DOUBLE_TAP_TIMEOUT_MS" in helper_method,
+            "Android double-tap timing bounds are enforced",
+        ),
+        (
+            "deltaX * deltaX + deltaY * deltaY <= mDoubleTapSlopSquared"
+            in helper_method,
+            "Density-aware double-tap slop is enforced",
+        ),
+    ]
+    for ok, description in helper_checks:
+        checks.append((ok, description, "Session.java"))
+except ValueError as exc:
+    checks.append((False, f"Unable to parse DT2S method structure: {exc}", "Session.java"))
+
+require(
+    "Session.java",
+    "ViewConfiguration.getDoubleTapTimeout()",
+    "Android double-tap timeout is reused",
 )
-checks.append(
-    (
-        "InputMonitor" not in session
-        and "monitorGestureInput" not in session
-        and "AccessibilityService" not in session,
-        "Implementation does not add raw-input or Accessibility interception",
-        "Session.java",
-    )
+require(
+    "Session.java",
+    "ViewConfiguration.getDoubleTapMinTime()",
+    "Android double-tap minimum time is reused",
 )
-checks.append(
-    (
-        session.count("{") == session.count("}"),
-        "Session.java braces are balanced",
-        "Session.java",
-    )
+require(
+    "Session.java",
+    "getScaledDoubleTapSlop()",
+    "Android density-aware double-tap slop is reused",
 )
 
 failed = [item for item in checks if not item[0]]

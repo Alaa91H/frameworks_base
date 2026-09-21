@@ -1,15 +1,19 @@
-name: Home DT2S validation
+name: Framework regression validation
 
 on:
   pull_request:
     branches:
       - cnb
     paths:
+      - "core/java/android/app/ActivityThread.java"
       - "core/java/android/provider/Settings.java"
       - "packages/SettingsProvider/src/android/provider/settings/backup/SecureSettings.java"
       - "packages/SettingsProvider/src/android/provider/settings/validators/SecureSettingsValidators.java"
+      - "packages/SystemUI/src/com/android/systemui/axdynamicbar/data/source/SystemIslandManager.kt"
+      - "packages/SystemUI/src/com/android/systemui/qrcodescanner/controller/QRCodeScannerController.java"
       - "services/core/java/com/android/server/wm/Session.java"
       - "tools/validate_home_dt2s.py"
+      - "tools/validate_framework_regressions.py"
       - ".github/workflows/home-dt2s-validation.yml"
   workflow_dispatch:
 
@@ -18,28 +22,37 @@ permissions:
 
 jobs:
   validate:
-    name: Native Home DT2S release checks
+    name: Focused framework release checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - name: Checkout only DT2S integration files
+      - name: Checkout audited framework files
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
           filter: blob:none
           sparse-checkout: |
+            core/java/android/app/ActivityThread.java
             core/java/android/provider/Settings.java
             packages/SettingsProvider/src/android/provider/settings/backup/SecureSettings.java
             packages/SettingsProvider/src/android/provider/settings/validators/SecureSettingsValidators.java
+            packages/SystemUI/src/com/android/systemui/axdynamicbar/data/source/SystemIslandManager.kt
+            packages/SystemUI/src/com/android/systemui/qrcodescanner/controller/QRCodeScannerController.java
             services/core/java/com/android/server/wm/Session.java
             tools/validate_home_dt2s.py
+            tools/validate_framework_regressions.py
 
-      - name: Validate Python checker
-        run: python3 -m py_compile tools/validate_home_dt2s.py
+      - name: Validate Python checkers
+        run: |
+          python3 -m py_compile tools/validate_home_dt2s.py
+          python3 -m py_compile tools/validate_framework_regressions.py
 
       - name: Validate native Home double tap to sleep
         run: python3 tools/validate_home_dt2s.py
+
+      - name: Validate QR and Dynamic Bar regressions
+        run: python3 tools/validate_framework_regressions.py
 
       - name: Check patch whitespace
         run: git diff --check HEAD^ HEAD

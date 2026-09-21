@@ -338,6 +338,8 @@ public final class ActivityThread extends ClientTransactionHandler
     /** @hide */
     public static final String TAG = "ActivityThread";
     private static final String GOOGLE_PLAY_SERVICES_PACKAGE = "com.google.android.gms";
+    private static final String GOOGLE_QR_SCANNER_ACTIVITY =
+            "com.google.android.gms.mlkit.barcode.ui.PlatformBarcodeScanningActivityProxy";
     private static final String EXTRA_FORCE_LTR_LAYOUT_DIRECTION =
             "com.android.systemui.extra.FORCE_LTR_LAYOUT_DIRECTION";
 
@@ -4427,6 +4429,7 @@ public final class ActivityThread extends ClientTransactionHandler
     private static void applyQrScannerLayoutDirectionOverride(ActivityClientRecord r) {
         if (r.intent == null || r.activityInfo == null
                 || !GOOGLE_PLAY_SERVICES_PACKAGE.equals(r.activityInfo.packageName)
+                || !GOOGLE_QR_SCANNER_ACTIVITY.equals(r.activityInfo.name)
                 || !r.intent.getBooleanExtra(EXTRA_FORCE_LTR_LAYOUT_DIRECTION, false)) {
             return;
         }
