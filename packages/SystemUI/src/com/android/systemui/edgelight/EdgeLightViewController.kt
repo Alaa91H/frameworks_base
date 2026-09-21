@@ -96,6 +96,10 @@ constructor(
                 edgeLightView.animationEffect = currentSettings.animationEffect
                 edgeLightView.userSpread = currentSettings.spread
                 edgeLightView.userIntensity = currentSettings.intensity
+                edgeLightView.showTop = currentSettings.showTop
+                edgeLightView.showSides = currentSettings.showSides
+                edgeLightView.showBottom = currentSettings.showBottom
+                edgeLightView.auroraColorMode = currentSettings.auroraColorMode
             }
         }
     }
