@@ -18,9 +18,11 @@ package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -52,6 +54,7 @@ import com.android.systemui.qs.pipeline.shared.TileSpec
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements.toElementKey
 import com.android.systemui.res.R
 import com.android.systemui.shade.shared.flag.DualShadeFlag
+import com.android.systemui.tuner.TunerService
 import javax.inject.Inject
 import kotlinx.coroutines.launch
 
@@ -64,6 +67,7 @@ constructor(
     override val viewModelFactory: InfiniteGridViewModel.Factory,
     private val textFeedbackContentViewModelFactory: TextFeedbackContentViewModel.Factory,
     private val tileHapticsViewModelFactory: TileHapticsViewModel.Factory,
+    private val tunerService: TunerService,
 ) : PaginatableGridLayout {
 
     @Composable
@@ -95,6 +99,7 @@ constructor(
                 }
             }
         val squishiness by viewModel.squishinessViewModel.squishiness.collectAsStateWithLifecycle()
+        val tileShapeMode = rememberTileShapeMode()
         val scope = rememberCoroutineScope()
 
         val bounceables =
@@ -130,11 +135,30 @@ constructor(
                     isVisible = listening,
                     requestToggleTextFeedback = textFeedbackViewModel::requestShowFeedback,
                     enableRevealEffect = enableRevealEffect,
+                    tileShapeMode = tileShapeMode,
                 )
             }
         }
 
         TileListener(tiles, listening)
+    }
+
+    @Composable
+    private fun rememberTileShapeMode(): Int {
+        var shapeMode by remember { mutableIntStateOf(0) }
+
+        DisposableEffect(tunerService) {
+            val tunable =
+                TunerService.Tunable { _, newValue ->
+                    shapeMode =
+                        TunerService.parseInteger(newValue, TILE_SHAPE_DYNAMIC)
+                            .coerceIn(TILE_SHAPE_DYNAMIC, TILE_SHAPE_CIRCLE)
+                }
+            tunerService.addTunable(tunable, QS_TILE_SHAPE)
+            onDispose { tunerService.removeTunable(tunable) }
+        }
+
+        return shapeMode
     }
 
     @Composable
@@ -234,5 +258,12 @@ constructor(
                 }
             }
         }
+    }
+
+    private companion object {
+        const val QS_TILE_SHAPE = "system:qs_tile_shape"
+
+        const val TILE_SHAPE_DYNAMIC = 0
+        const val TILE_SHAPE_CIRCLE = 4
     }
 }

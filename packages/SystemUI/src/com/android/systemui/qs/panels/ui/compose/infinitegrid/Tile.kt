@@ -134,6 +134,7 @@ private val TileViewModel.traceName
  * @param detailsViewModel An optional [DetailsViewModel] used to handle navigation to a detailed
  *   view when a tile is clicked, if applicable.
  * @param enableRevealEffect If `true`, the tiles will animate using the reveal animation.
+ * @param tileShapeMode Visual shape override for the tile. Zero keeps the platform dynamic shape.
  */
 @Composable
 fun ContentScope.Tile(
@@ -148,6 +149,7 @@ fun ContentScope.Tile(
     requestToggleTextFeedback: (TileSpec) -> Unit = {},
     detailsViewModel: DetailsViewModel?,
     enableRevealEffect: Boolean = false,
+    tileShapeMode: Int = 0,
 ) {
     trace(tile.traceName) {
         val currentBounceableInfo by rememberUpdatedState(bounceableInfo)
@@ -176,7 +178,7 @@ fun ContentScope.Tile(
             }
 
         // TODO(b/361789146): Draw the shapes instead of clipping
-        val tileShape by TileDefaults.animateTileShapeAsState(uiState)
+        val tileShape by TileDefaults.animateTileShapeAsState(uiState, tileShapeMode)
         val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
         val isDualTarget = uiState.handlesToggleClick
         val interactionSource = remember { MutableInteractionSource() }
@@ -319,7 +321,7 @@ fun ContentScope.Tile(
                                 },
                         )
                     } else {
-                        val iconShape by TileDefaults.animateIconShapeAsState(uiState)
+                        val iconShape by TileDefaults.animateIconShapeAsState(uiState, tileShapeMode)
                         val secondaryClick: (() -> Unit)? =
                             {
                                     hapticsViewModel.setTileInteractionState(
@@ -626,21 +628,48 @@ private object TileDefaults {
     }
 
     @Composable
-    fun animateIconShapeAsState(uiState: TileUiState): State<RoundedCornerShape> {
+    fun animateIconShapeAsState(
+        uiState: TileUiState,
+        shapeMode: Int = TILE_SHAPE_DYNAMIC,
+    ): State<RoundedCornerShape> {
         return animateShapeAsState(
             targetValue = iconRadius(uiState),
             label = "QSTileIconCornerRadius",
+            shapeMode = shapeMode,
         )
     }
 
     @Composable
-    fun animateTileShapeAsState(uiState: TileUiState): State<RoundedCornerShape> {
-        return animateShapeAsState(targetValue = tileRadius(uiState), label = "QSTileCornerRadius")
+    fun animateTileShapeAsState(
+        uiState: TileUiState,
+        shapeMode: Int = TILE_SHAPE_DYNAMIC,
+    ): State<RoundedCornerShape> {
+        return animateShapeAsState(
+            targetValue = tileRadius(uiState),
+            label = "QSTileCornerRadius",
+            shapeMode = shapeMode,
+        )
     }
 
     @Composable
-    fun animateShapeAsState(targetValue: Dp, label: String): State<RoundedCornerShape> {
-        val animatedCornerRadius by animateDpAsState(targetValue = targetValue, label = label)
+    fun animateShapeAsState(
+        targetValue: Dp,
+        label: String,
+        shapeMode: Int = TILE_SHAPE_DYNAMIC,
+    ): State<RoundedCornerShape> {
+        if (shapeMode == TILE_SHAPE_CIRCLE) {
+            return remember { mutableStateOf(RoundedCornerShape(percent = 50)) }
+        }
+
+        val resolvedCornerRadius =
+            when (shapeMode) {
+                TILE_SHAPE_ROUNDED_SMOOTH -> InactiveTileCornerRadius
+                TILE_SHAPE_ROUNDED_SQUARE -> ActiveTileCornerRadius
+                TILE_SHAPE_SQUARE -> 0.dp
+                else -> targetValue
+            }
+        val animatedCornerRadius by
+            animateDpAsState(targetValue = resolvedCornerRadius, label = label)
 
         return remember {
             val corner =
@@ -652,6 +681,12 @@ private object TileDefaults {
             mutableStateOf(RoundedCornerShape(corner))
         }
     }
+
+    private const val TILE_SHAPE_DYNAMIC = 0
+    private const val TILE_SHAPE_ROUNDED_SMOOTH = 1
+    private const val TILE_SHAPE_ROUNDED_SQUARE = 2
+    private const val TILE_SHAPE_SQUARE = 3
+    private const val TILE_SHAPE_CIRCLE = 4
 }
 
 /**
