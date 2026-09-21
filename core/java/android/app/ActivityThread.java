@@ -337,6 +337,9 @@ public final class ActivityThread extends ClientTransactionHandler
 
     /** @hide */
     public static final String TAG = "ActivityThread";
+    private static final String GOOGLE_PLAY_SERVICES_PACKAGE = "com.google.android.gms";
+    private static final String EXTRA_FORCE_LTR_LAYOUT_DIRECTION =
+            "com.android.systemui.extra.FORCE_LTR_LAYOUT_DIRECTION";
 
     // TODO(b/303199244): This is a temporary allowlist for early field data collection.
     // It will be replaced by a sharding config in the future.
@@ -4414,6 +4417,29 @@ public final class ActivityThread extends ClientTransactionHandler
         sendMessage(H.CLEAN_UP_CONTEXT, cci);
     }
 
+    /**
+     * Keeps the Google Play services QR scanner's physical viewfinder geometry from being mirrored
+     * in RTL locales. SystemUI marks only its GMS QR scanner launch with the private extra below.
+     *
+     * <p>Only layout direction is overridden; locales stay unchanged so translated scanner strings
+     * continue to follow the user's language.
+     */
+    private static void applyQrScannerLayoutDirectionOverride(ActivityClientRecord r) {
+        if (r.intent == null || r.activityInfo == null
+                || !GOOGLE_PLAY_SERVICES_PACKAGE.equals(r.activityInfo.packageName)
+                || !r.intent.getBooleanExtra(EXTRA_FORCE_LTR_LAYOUT_DIRECTION, false)) {
+            return;
+        }
+
+        final Configuration overrideConfig = r.overrideConfig == null
+                ? new Configuration()
+                : new Configuration(r.overrideConfig);
+        overrideConfig.screenLayout =
+                (overrideConfig.screenLayout & ~Configuration.SCREENLAYOUT_LAYOUTDIR_MASK)
+                        | Configuration.SCREENLAYOUT_LAYOUTDIR_LTR;
+        r.overrideConfig = overrideConfig;
+    }
+
     /**  Core implementation of activity launch. */
     private Activity performLaunchActivity(ActivityClientRecord r, Intent customIntent) {
         ActivityInfo aInfo = r.activityInfo;
@@ -4445,6 +4471,8 @@ public final class ActivityThread extends ClientTransactionHandler
             component = new ComponentName(r.activityInfo.packageName,
                     r.activityInfo.targetActivity);
         }
+
+        applyQrScannerLayoutDirectionOverride(r);
 
         boolean isSandboxActivityContext = SdkSandboxActivityAuthority.isSdkSandboxActivityIntent(
                                 mSystemContext, r.intent);
