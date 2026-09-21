@@ -92,6 +92,7 @@ constructor(
         val largeTilesSpan = viewModel.columnsWithMediaViewModel.largeSpan
         val largeTiles by viewModel.iconTilesViewModel.largeTilesState
         val classicStyle = rememberClassicPanelStyle()
+        val classicIconShapeKey = rememberClassicIconShapeKey()
         // Tiles or largeTiles may be updated while this is composed, so listen to any changes.
         // Classic mode intentionally normalizes every tile to a single grid span.
         val sizedTiles =
@@ -142,6 +143,7 @@ constructor(
                     requestToggleTextFeedback = textFeedbackViewModel::requestShowFeedback,
                     enableRevealEffect = enableRevealEffect,
                     classicStyle = classicStyle,
+                    classicIconShapeKey = classicIconShapeKey,
                 )
             }
         }
@@ -163,6 +165,25 @@ constructor(
         }
 
         return classicStyle.value
+    }
+
+    @Composable
+    private fun rememberClassicIconShapeKey(): String {
+        val iconShapeKey = remember { mutableStateOf(QSTileIconShapes.DEFAULT_KEY) }
+
+        DisposableEffect(tunerService) {
+            val tunable =
+                TunerService.Tunable { _, newValue ->
+                    val candidate = newValue ?: QSTileIconShapes.DEFAULT_KEY
+                    iconShapeKey.value =
+                        if (QSTileIconShapes.isKnownKey(candidate)) candidate
+                        else QSTileIconShapes.DEFAULT_KEY
+                }
+            tunerService.addTunable(tunable, QS_TILE_ICON_SHAPE)
+            onDispose { tunerService.removeTunable(tunable) }
+        }
+
+        return iconShapeKey.value
     }
 
     @Composable
@@ -266,6 +287,7 @@ constructor(
 
     private companion object {
         const val QS_PANEL_STYLE = "system:qs_panel_style"
+        const val QS_TILE_ICON_SHAPE = "system:qs_tile_icon_shape"
         const val PANEL_STYLE_CARD = 0
         const val PANEL_STYLE_CLASSIC = 1
     }

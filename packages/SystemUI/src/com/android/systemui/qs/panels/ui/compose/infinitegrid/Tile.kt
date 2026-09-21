@@ -135,6 +135,7 @@ private val TileViewModel.traceName
  *   view when a tile is clicked, if applicable.
  * @param enableRevealEffect If `true`, the tiles will animate using the reveal animation.
  * @param classicStyle If `true`, tiles use the compact classic icon-and-label presentation.
+ * @param classicIconShapeKey Shape key applied to the icon surface in Classic mode.
  */
 @Composable
 fun ContentScope.Tile(
@@ -150,6 +151,7 @@ fun ContentScope.Tile(
     detailsViewModel: DetailsViewModel?,
     enableRevealEffect: Boolean = false,
     classicStyle: Boolean = false,
+    classicIconShapeKey: String = QSTileIconShapes.DEFAULT_KEY,
 ) {
     trace(tile.traceName) {
         val currentBounceableInfo by rememberUpdatedState(bounceableInfo)
@@ -318,6 +320,7 @@ fun ContentScope.Tile(
                             label = uiState.label,
                             secondaryLabel = uiState.secondaryLabel,
                             iconProvider = iconProvider,
+                            iconShapeKey = classicIconShapeKey,
                             colors = colors,
                             modifier =
                                 Modifier.align(Alignment.TopCenter).bounceScale {
@@ -531,6 +534,7 @@ data class TileColors(
     val label: Color,
     val secondaryLabel: Color,
     val icon: Color,
+    val outline: Color,
     val classicLabel: Color,
     val classicSecondaryLabel: Color,
 )
@@ -553,6 +557,7 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onPrimary,
             secondaryLabel = MaterialTheme.colorScheme.onPrimary,
             icon = MaterialTheme.colorScheme.onPrimary,
+            outline = MaterialTheme.colorScheme.primary,
             classicLabel = MaterialTheme.colorScheme.onSurface,
             classicSecondaryLabel = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f),
         )
@@ -567,6 +572,7 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onPrimary,
+            outline = MaterialTheme.colorScheme.primary,
             classicLabel = MaterialTheme.colorScheme.onSurface,
             classicSecondaryLabel = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f),
         )
@@ -580,6 +586,7 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,
+            outline = MaterialTheme.colorScheme.onSurface,
             classicLabel = MaterialTheme.colorScheme.onSurface,
             classicSecondaryLabel = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f),
         )
@@ -593,6 +600,7 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,
+            outline = MaterialTheme.colorScheme.onSurface,
             classicLabel = MaterialTheme.colorScheme.onSurface,
             classicSecondaryLabel = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f),
         )
@@ -608,6 +616,7 @@ private object TileDefaults {
             label = onSurfaceVariantColor,
             secondaryLabel = onSurfaceVariantColor,
             icon = onSurfaceVariantColor,
+            outline = onSurfaceVariantColor,
             classicLabel = onSurfaceVariantColor,
             classicSecondaryLabel = onSurfaceVariantColor,
         )
