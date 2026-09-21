@@ -81,7 +81,9 @@ public final class FaceUnlockScanEffectView extends View {
     private float mProgress;
     private float mDensity;
 
+    private float mLeftOuterX;
     private float mLeftInnerX;
+    private float mRightOuterX;
     private float mRightInnerX;
     private float mCenterY;
 
@@ -343,12 +345,12 @@ public final class FaceUnlockScanEffectView extends View {
         mLeftInnerX = Math.max(screenInset, mCameraBounds.left - sideGap);
         mRightInnerX = Math.min(getWidth() - screenInset, mCameraBounds.right + sideGap);
 
-        final float leftOuterX = Math.max(screenInset, mLeftInnerX - targetWingLength);
-        final float rightOuterX = Math.min(getWidth() - screenInset,
+        mLeftOuterX = Math.max(screenInset, mLeftInnerX - targetWingLength);
+        mRightOuterX = Math.min(getWidth() - screenInset,
                 mRightInnerX + targetWingLength);
 
-        buildWing(mLeftWing, leftOuterX, mLeftInnerX, mCenterY, true);
-        buildWing(mRightWing, rightOuterX, mRightInnerX, mCenterY, false);
+        buildWing(mLeftWing, mLeftOuterX, mLeftInnerX, mCenterY, true);
+        buildWing(mRightWing, mRightOuterX, mRightInnerX, mCenterY, false);
         mLeftMeasure.setPath(mLeftWing, false);
         mRightMeasure.setPath(mRightWing, false);
 
@@ -413,7 +415,7 @@ public final class FaceUnlockScanEffectView extends View {
                 + 0.32f * (float) Math.sin(mProgress * Math.PI * 2.0);
 
         final Shader leftShader = new LinearGradient(
-                mLeftWing.getBounds().left,
+                mLeftOuterX,
                 mCenterY,
                 mLeftInnerX,
                 mCenterY,
@@ -427,7 +429,7 @@ public final class FaceUnlockScanEffectView extends View {
                 Shader.TileMode.CLAMP);
 
         final Shader rightShader = new LinearGradient(
-                mRightWing.getBounds().right,
+                mRightOuterX,
                 mCenterY,
                 mRightInnerX,
                 mCenterY,
