@@ -14780,6 +14780,20 @@ public final class Settings {
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_AOD_ANIM = "lock_screen_custom_clock_aod_anim";
 
         /**
+         * Custom clock scale used while the AOD transition is active.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_AOD_SCALE =
+                "lock_screen_custom_clock_aod_scale";
+
+        /**
+         * Maximum custom clock opacity while dozing.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_AOD_OPACITY =
+                "lock_screen_custom_clock_aod_opacity";
+
+        /**
          * Custom clock animation
          * @hide
          */
