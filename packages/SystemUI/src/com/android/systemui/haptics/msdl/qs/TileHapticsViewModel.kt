@@ -20,6 +20,7 @@ import android.service.quicksettings.Tile
 import com.android.systemui.animation.Expandable
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.qs.panels.ui.viewmodel.TileViewModel
+import com.android.systemui.tuner.TunerService
 import com.android.systemui.util.kotlin.mapDirect
 import com.android.systemui.util.kotlin.pairwise
 import com.google.android.msdl.data.model.MSDLToken
@@ -39,11 +40,14 @@ class TileHapticsViewModel
 @AssistedInject
 constructor(
     private val msdlPlayer: MSDLPlayer,
+    private val tunerService: TunerService,
     @Assisted private val tileViewModel: TileViewModel,
-) : ExclusiveActivatable() {
+) : ExclusiveActivatable(), TunerService.Tunable {
 
     private val tileInteractionState = MutableStateFlow(TileInteractionState.IDLE)
     private val tileAnimationState = MutableStateFlow(TileAnimationState.IDLE)
+    private val hapticsEnabled = MutableStateFlow(true)
+
     private val canPlayToggleHaptics: Boolean
         get() =
             tileAnimationState.value == TileAnimationState.IDLE &&
@@ -86,23 +90,42 @@ constructor(
         merge(toggleHapticsState, interactionHapticsState)
 
     override suspend fun onActivated() {
-        hapticsState.collect { hapticsState ->
-            val tokenToPlay: MSDLToken? =
-                when (hapticsState) {
-                    TileHapticsState.TOGGLE_ON -> MSDLToken.SWITCH_ON
-                    TileHapticsState.TOGGLE_OFF -> MSDLToken.SWITCH_OFF
-                    TileHapticsState.LONG_PRESS -> MSDLToken.LONG_PRESS
-                    TileHapticsState.NO_HAPTICS -> null
+        tunerService.addTunable(this, QS_TILE_HAPTIC)
+        try {
+            hapticsState.collect { hapticsState ->
+                if (!hapticsEnabled.value) {
+                    resetStates()
+                    return@collect
                 }
-            tokenToPlay?.let {
-                msdlPlayer.playToken(it)
-                resetStates()
+
+                val tokenToPlay: MSDLToken? =
+                    when (hapticsState) {
+                        TileHapticsState.TOGGLE_ON -> MSDLToken.SWITCH_ON
+                        TileHapticsState.TOGGLE_OFF -> MSDLToken.SWITCH_OFF
+                        TileHapticsState.LONG_PRESS -> MSDLToken.LONG_PRESS
+                        TileHapticsState.NO_HAPTICS -> null
+                    }
+                tokenToPlay?.let {
+                    msdlPlayer.playToken(it)
+                    resetStates()
+                }
             }
+        } finally {
+            tunerService.removeTunable(this)
         }
     }
 
     override suspend fun onDeactivated() {
         resetStates()
+    }
+
+    override fun onTuningChanged(key: String?, newValue: String?) {
+        if (key != QS_TILE_HAPTIC) return
+
+        hapticsEnabled.value = TunerService.parseIntegerSwitch(newValue, true)
+        if (!hapticsEnabled.value) {
+            resetStates()
+        }
     }
 
     private fun resetStates() {
@@ -158,6 +181,10 @@ constructor(
         IDLE,
         DIALOG_LAUNCH,
         ACTIVITY_LAUNCH,
+    }
+
+    private companion object {
+        const val QS_TILE_HAPTIC = "system:qs_tile_haptic"
     }
 
     @AssistedFactory
