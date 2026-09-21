@@ -63,6 +63,11 @@ public class BatterySaverPolicy extends ContentObserver implements
         DeviceConfig.OnPropertiesChangedListener {
     private static final String TAG = "BatterySaverPolicy";
 
+    private static final String SETTING_LOW_POWER_DISABLE_AOD = "low_power_disable_aod";
+    private static final String SETTING_LOW_POWER_BRIGHTNESS_REDUCTION =
+            "low_power_brightness_reduction";
+    private static final String SETTING_LOW_POWER_FORCE_DARK = "low_power_force_dark";
+
     static final boolean DEBUG = false; // DO NOT SUBMIT WITH TRUE.
 
     @VisibleForTesting
@@ -291,6 +296,12 @@ public class BatterySaverPolicy extends ContentObserver implements
                 Settings.Global.BATTERY_SAVER_CONSTANTS), false, this);
         mContentResolver.registerContentObserver(Settings.Global.getUriFor(
                 Settings.Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS), false, this);
+        mContentResolver.registerContentObserver(Settings.Global.getUriFor(
+                SETTING_LOW_POWER_DISABLE_AOD), false, this);
+        mContentResolver.registerContentObserver(Settings.Global.getUriFor(
+                SETTING_LOW_POWER_BRIGHTNESS_REDUCTION), false, this);
+        mContentResolver.registerContentObserver(Settings.Global.getUriFor(
+                SETTING_LOW_POWER_FORCE_DARK), false, this);
 
         final AccessibilityManager acm = mContext.getSystemService(AccessibilityManager.class);
 
@@ -357,7 +368,20 @@ public class BatterySaverPolicy extends ContentObserver implements
 
     @Override
     public void onChange(boolean selfChange, Uri uri) {
+        if (uri != null && isUserBatterySaverSetting(uri)) {
+            synchronized (mLock) {
+                updatePolicyDependenciesLocked();
+            }
+            maybeNotifyListenersOfPolicyChange();
+            return;
+        }
         refreshSettings();
+    }
+
+    private boolean isUserBatterySaverSetting(Uri uri) {
+        return Settings.Global.getUriFor(SETTING_LOW_POWER_DISABLE_AOD).equals(uri)
+                || Settings.Global.getUriFor(SETTING_LOW_POWER_BRIGHTNESS_REDUCTION).equals(uri)
+                || Settings.Global.getUriFor(SETTING_LOW_POWER_FORCE_DARK).equals(uri);
     }
 
     @Override
@@ -490,22 +514,48 @@ public class BatterySaverPolicy extends ContentObserver implements
             locationMode = rawPolicy.locationMode;
         }
 
+        float adjustBrightnessFactor = rawPolicy.adjustBrightnessFactor;
+        boolean disableAod = rawPolicy.disableAod;
+        boolean enableAdjustBrightness = rawPolicy.enableAdjustBrightness;
+        boolean enableNightMode = rawPolicy.enableNightMode;
+
+        // User-facing overrides apply only to full Battery Saver. When the settings are absent,
+        // preserve the device's existing policy so current overlays keep their behavior.
+        if (mPolicyLevel == POLICY_LEVEL_FULL) {
+            disableAod = Settings.Global.getInt(mContentResolver,
+                    SETTING_LOW_POWER_DISABLE_AOD, disableAod ? 1 : 0) != 0;
+            enableNightMode = Settings.Global.getInt(mContentResolver,
+                    SETTING_LOW_POWER_FORCE_DARK, enableNightMode ? 1 : 0) != 0;
+
+            final int brightnessReduction = Settings.Global.getInt(mContentResolver,
+                    SETTING_LOW_POWER_BRIGHTNESS_REDUCTION, -1);
+            if (brightnessReduction >= 0) {
+                if (brightnessReduction == 0) {
+                    enableAdjustBrightness = false;
+                } else {
+                    final int clampedReduction = Math.min(50, brightnessReduction);
+                    enableAdjustBrightness = true;
+                    adjustBrightnessFactor = 1.0f - (clampedReduction / 100.0f);
+                }
+            }
+        }
+
         mEffectivePolicyRaw = new Policy(
-                rawPolicy.adjustBrightnessFactor,
+                adjustBrightnessFactor,
                 rawPolicy.advertiseIsEnabled,
                 rawPolicy.deferFullBackup,
                 rawPolicy.deferKeyValueBackup,
                 rawPolicy.disableAnimation,
-                rawPolicy.disableAod,
+                disableAod,
                 rawPolicy.disableLaunchBoost,
                 rawPolicy.disableOptionalSensors,
                 // Don't disable vibration when accessibility is on.
                 rawPolicy.disableVibration && !mAccessibilityEnabled.get(),
-                rawPolicy.enableAdjustBrightness,
+                enableAdjustBrightness,
                 rawPolicy.enableDataSaver,
                 rawPolicy.enableFirewall,
                 // Don't force night mode when car projection is enabled.
-                rawPolicy.enableNightMode && !mAutomotiveProjectionActive.get(),
+                enableNightMode && !mAutomotiveProjectionActive.get(),
                 rawPolicy.enableQuickDoze,
                 rawPolicy.forceAllAppsStandby,
                 rawPolicy.forceBackgroundCheck,
