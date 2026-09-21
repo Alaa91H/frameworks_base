@@ -62,17 +62,26 @@ constructor(
     ), TunerService.Tunable {
 
     private var tunerRegistered = false
+    private var registeringTunables = false
 
     override fun bindData(constraintLayout: ConstraintLayout) {
         super.bindData(constraintLayout)
         if (!tunerRegistered) {
-            tunerService.addTunable(this, NOTIFICATION_TOP_SPACING_KEY, NOTIFICATION_HORIZONTAL_INSET_KEY)
             tunerRegistered = true
+            registeringTunables = true
+            tunerService.addTunable(
+                this,
+                NOTIFICATION_TOP_SPACING_KEY,
+                NOTIFICATION_HORIZONTAL_INSET_KEY,
+            )
+            registeringTunables = false
         }
     }
 
     override fun onTuningChanged(key: String?, newValue: String?) {
-        if (key == NOTIFICATION_TOP_SPACING_KEY || key == NOTIFICATION_HORIZONTAL_INSET_KEY) {
+        if (!registeringTunables &&
+            (key == NOTIFICATION_TOP_SPACING_KEY || key == NOTIFICATION_HORIZONTAL_INSET_KEY)
+        ) {
             keyguardBlueprintInteractor
                 .get()
                 .refreshBlueprint(IntraBlueprintTransition.Type.DefaultTransition)
