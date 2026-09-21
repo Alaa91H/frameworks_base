@@ -456,12 +456,20 @@ public class BatterySaverController implements BatterySaverPolicyListener {
             mIsInteractive = isInteractive;
         }
 
-        mCustomActions.setFullBatterySaverEnabled(fullEnabled);
+        // Capture/apply custom full-saver state before LOW_POWER is sent to the Power HAL so
+        // direct CPU limits can preserve the pre-saver scaling_max_freq values.
+        if (fullEnabled) {
+            mCustomActions.setFullBatterySaverEnabled(true);
+        }
 
         final PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
         if (pmi != null) {
             pmi.setPowerMode(Mode.LOW_POWER, isEnabled());
         }
+
+        // Re-apply after the Power HAL transition so the optional CPU percentage cap remains the
+        // final limit. On exit, restore values only after LOW_POWER has been disabled.
+        mCustomActions.setFullBatterySaverEnabled(fullEnabled);
 
         updateBatterySavingStats();
 
