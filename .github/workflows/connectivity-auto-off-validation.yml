@@ -1,0 +1,38 @@
+name: Connectivity Auto-off validation
+
+on:
+  pull_request:
+    branches:
+      - cnb
+      - "perf/connectivity-auto-off-*"
+      - "fix/connectivity-auto-off-*"
+    paths:
+      - "services/core/java/com/android/server/ConnectivityAutoOffController.java"
+      - "services/core/java/com/android/server/EvolutionSystemExService.java"
+      - "tools/validate_connectivity_auto_off.py"
+      - ".github/workflows/connectivity-auto-off-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Connectivity Auto-off invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Validate checker syntax
+        run: python3 -m py_compile tools/validate_connectivity_auto_off.py
+
+      - name: Validate Connectivity Auto-off
+        run: python3 tools/validate_connectivity_auto_off.py
+
+      - name: Check patch whitespace
+        run: git diff --check HEAD^ HEAD
