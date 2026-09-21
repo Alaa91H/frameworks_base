@@ -66,6 +66,7 @@ final class BatterySaverCustomActions extends ContentObserver {
     private static final String SETTING_SCREEN_TIMEOUT_BACKUP_USER =
             "low_power_screen_timeout_backup_user";
     private static final String SETTING_5G_BACKUP = "low_power_5g_backup";
+    private static final String SETTING_5G_APPLIED_BACKUP = "low_power_5g_applied_backup";
 
     private static final String CPUFREQ_DIR = "/sys/devices/system/cpu/cpufreq";
     private static final String FILE_SCALING_MAX_FREQ = "scaling_max_freq";
@@ -87,6 +88,7 @@ final class BatterySaverCustomActions extends ContentObserver {
     private final ArrayMap<String, Long> mPreviousCpuMaxFreqs = new ArrayMap<>();
     private final ArrayMap<String, Long> mAppliedCpuMaxFreqs = new ArrayMap<>();
     private final ArrayMap<Integer, Long> mPreviousPowerNetworkTypes = new ArrayMap<>();
+    private final ArrayMap<Integer, Long> mAppliedPowerNetworkTypes = new ArrayMap<>();
     private final ArrayMap<Integer, Long> mPreviousScreenTimeouts = new ArrayMap<>();
 
     private final ContentObserver mScreenTimeoutObserver;
@@ -143,6 +145,7 @@ final class BatterySaverCustomActions extends ContentObserver {
         loadCpuMaxFreqBackups();
         loadCpuAppliedFreqs();
         loadNetworkTypeBackups();
+        loadAppliedNetworkTypeBackups();
         loadScreenTimeoutBackups();
     }
 
@@ -472,27 +475,43 @@ final class BatterySaverCustomActions extends ContentObserver {
         }
 
         boolean backupChanged = false;
+        boolean appliedChanged = false;
         for (int subId : subscriptionIds) {
             final TelephonyManager telephony = mTelephonyManager.createForSubscriptionId(subId);
             try {
-                long previous = mPreviousPowerNetworkTypes.containsKey(subId)
-                        ? mPreviousPowerNetworkTypes.get(subId)
-                        : telephony.getAllowedNetworkTypesForReason(
-                                TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER);
-
-                if (previous < 0) {
+                final long current = telephony.getAllowedNetworkTypesForReason(
+                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER);
+                if (current < 0) {
                     continue;
                 }
 
-                if (!mPreviousPowerNetworkTypes.containsKey(subId)) {
-                    mPreviousPowerNetworkTypes.put(subId, previous);
-                    backupChanged = true;
+                final Long lastApplied = mAppliedPowerNetworkTypes.get(subId);
+                final boolean stillOwnsCurrentValue =
+                        lastApplied != null && current == lastApplied;
+                final long withoutNr = current & ~TelephonyManager.NETWORK_TYPE_BITMASK_NR;
+
+                if (!stillOwnsCurrentValue && withoutNr == current) {
+                    // NR is already disabled by another component and Battery Saver does not own
+                    // this mask. There is nothing to apply or restore.
+                    backupChanged |= mPreviousPowerNetworkTypes.remove(subId) != null;
+                    appliedChanged |= mAppliedPowerNetworkTypes.remove(subId) != null;
+                    continue;
                 }
 
-                final long withoutNr =
-                        previous & ~TelephonyManager.NETWORK_TYPE_BITMASK_NR;
+                if (!stillOwnsCurrentValue) {
+                    final Long previous = mPreviousPowerNetworkTypes.put(subId, current);
+                    backupChanged |= previous == null || previous != current;
+                    appliedChanged |= mAppliedPowerNetworkTypes.remove(subId) != null;
+                }
+
+                if (withoutNr == current) {
+                    continue;
+                }
+
                 telephony.setAllowedNetworkTypesForReason(
                         TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER, withoutNr);
+                final Long oldApplied = mAppliedPowerNetworkTypes.put(subId, withoutNr);
+                appliedChanged |= oldApplied == null || oldApplied != withoutNr;
             } catch (IllegalArgumentException | IllegalStateException
                     | SecurityException | UnsupportedOperationException e) {
                 Slog.w(TAG, "Unable to disable 5G for subscription " + subId, e);
@@ -502,32 +521,57 @@ final class BatterySaverCustomActions extends ContentObserver {
         if (backupChanged) {
             persistNetworkTypeBackups();
         }
+        if (appliedChanged) {
+            persistAppliedNetworkTypeBackups();
+        }
     }
 
     private void restoreNetworkTypes() {
         if (mPreviousPowerNetworkTypes.isEmpty() || mTelephonyManager == null) {
+            if (!mAppliedPowerNetworkTypes.isEmpty()) {
+                mAppliedPowerNetworkTypes.clear();
+                persistAppliedNetworkTypeBackups();
+            }
             return;
         }
 
-        final ArrayList<Integer> restored = new ArrayList<>();
+        final ArrayList<Integer> completed = new ArrayList<>();
+        boolean appliedChanged = false;
         for (Map.Entry<Integer, Long> entry : mPreviousPowerNetworkTypes.entrySet()) {
             final int subId = entry.getKey();
             try {
-                mTelephonyManager.createForSubscriptionId(subId)
-                        .setAllowedNetworkTypesForReason(
-                                TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER,
-                                entry.getValue());
-                restored.add(subId);
+                final TelephonyManager telephony =
+                        mTelephonyManager.createForSubscriptionId(subId);
+                final long current = telephony.getAllowedNetworkTypesForReason(
+                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER);
+                final Long applied = mAppliedPowerNetworkTypes.get(subId);
+
+                if (applied == null || current != applied) {
+                    // The current mask is no longer one Battery Saver owns. Do not overwrite a
+                    // newer user/vendor/telephony decision with our stale pre-saver backup.
+                    appliedChanged |= mAppliedPowerNetworkTypes.remove(subId) != null;
+                    completed.add(subId);
+                    continue;
+                }
+
+                telephony.setAllowedNetworkTypesForReason(
+                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER,
+                        entry.getValue());
+                appliedChanged |= mAppliedPowerNetworkTypes.remove(subId) != null;
+                completed.add(subId);
             } catch (IllegalArgumentException | IllegalStateException
                     | SecurityException | UnsupportedOperationException e) {
                 Slog.w(TAG, "Unable to restore network types for subscription " + subId, e);
             }
         }
 
-        for (int subId : restored) {
+        for (int subId : completed) {
             mPreviousPowerNetworkTypes.remove(subId);
         }
         persistNetworkTypeBackups();
+        if (appliedChanged) {
+            persistAppliedNetworkTypeBackups();
+        }
     }
 
     private void updateScreenTimeout(int timeoutMs) {
@@ -765,6 +809,83 @@ final class BatterySaverCustomActions extends ContentObserver {
                 // Ignore malformed stale entries.
             }
         }
+    }
+
+    private void loadAppliedNetworkTypeBackups() {
+        mAppliedPowerNetworkTypes.clear();
+        if (mTelephonyManager == null) {
+            mPreviousPowerNetworkTypes.clear();
+            Settings.Global.putString(mResolver, SETTING_5G_BACKUP, null);
+            Settings.Global.putString(mResolver, SETTING_5G_APPLIED_BACKUP, null);
+            return;
+        }
+
+        final String serialized = Settings.Global.getString(
+                mResolver, SETTING_5G_APPLIED_BACKUP);
+        if (serialized == null || serialized.isEmpty()) {
+            return;
+        }
+
+        boolean previousChanged = false;
+        boolean appliedChanged = false;
+        for (String item : serialized.split(";")) {
+            final int separator = item.indexOf('=');
+            if (separator <= 0 || separator >= item.length() - 1) {
+                appliedChanged = true;
+                continue;
+            }
+            try {
+                final int subId = Integer.parseInt(item.substring(0, separator));
+                final long appliedMask = Long.parseLong(item.substring(separator + 1));
+                if (!mPreviousPowerNetworkTypes.containsKey(subId)) {
+                    appliedChanged = true;
+                    continue;
+                }
+
+                final long current = mTelephonyManager.createForSubscriptionId(subId)
+                        .getAllowedNetworkTypesForReason(
+                                TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER);
+                if (current == appliedMask) {
+                    mAppliedPowerNetworkTypes.put(subId, appliedMask);
+                } else {
+                    // Ownership did not survive the restart. Drop both entries so a later restore
+                    // cannot overwrite the newer mask.
+                    mPreviousPowerNetworkTypes.remove(subId);
+                    previousChanged = true;
+                    appliedChanged = true;
+                }
+            } catch (NumberFormatException ignored) {
+                appliedChanged = true;
+            } catch (IllegalArgumentException | IllegalStateException | SecurityException
+                    | UnsupportedOperationException e) {
+                Slog.w(TAG, "Unable to verify persisted 5G ownership", e);
+                appliedChanged = true;
+            }
+        }
+
+        if (previousChanged) {
+            persistNetworkTypeBackups();
+        }
+        if (appliedChanged) {
+            persistAppliedNetworkTypeBackups();
+        }
+    }
+
+    private void persistAppliedNetworkTypeBackups() {
+        if (mAppliedPowerNetworkTypes.isEmpty()) {
+            Settings.Global.putString(mResolver, SETTING_5G_APPLIED_BACKUP, null);
+            return;
+        }
+
+        final StringBuilder serialized = new StringBuilder();
+        for (Map.Entry<Integer, Long> entry : mAppliedPowerNetworkTypes.entrySet()) {
+            if (serialized.length() > 0) {
+                serialized.append(';');
+            }
+            serialized.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        Settings.Global.putString(
+                mResolver, SETTING_5G_APPLIED_BACKUP, serialized.toString());
     }
 
     private void persistNetworkTypeBackups() {
