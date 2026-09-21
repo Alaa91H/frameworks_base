@@ -73,6 +73,8 @@ public class BatterySaverController implements BatterySaverPolicyListener {
 
     private final BatterySavingStats mBatterySavingStats;
 
+    private final BatterySaverCustomActions mCustomActions;
+
     @GuardedBy("mLock")
     private final ArrayList<LowPowerModeListener> mListeners = new ArrayList<>();
 
@@ -205,6 +207,7 @@ public class BatterySaverController implements BatterySaverPolicyListener {
         mLock = lock;
         mContext = context;
         mHandler = new MyHandler(looper);
+        mCustomActions = new BatterySaverCustomActions(context, mHandler);
         mBatterySaverPolicy = policy;
         mBatterySaverPolicy.addListener(this);
         mBatterySavingStats = batterySavingStats;
@@ -232,6 +235,8 @@ public class BatterySaverController implements BatterySaverPolicyListener {
         filter.addAction(PowerManager.ACTION_LIGHT_DEVICE_IDLE_MODE_CHANGED);
         mContext.registerReceiver(mReceiver, filter);
 
+        mCustomActions.systemReady();
+        mCustomActions.setFullBatterySaverEnabled(isFullEnabled());
         mHandler.postSystemReady();
     }
 
@@ -427,10 +432,12 @@ public class BatterySaverController implements BatterySaverPolicyListener {
         final LowPowerModeListener[] listeners;
 
         final boolean enabled;
+        final boolean fullEnabled;
         final boolean isInteractive = getPowerManager().isInteractive();
 
         synchronized (mLock) {
-            enabled = getFullEnabledLocked() || getAdaptiveEnabledLocked();
+            fullEnabled = getFullEnabledLocked();
+            enabled = fullEnabled || getAdaptiveEnabledLocked();
 
             EventLogTags.writeBatterySaverMode(
                     mFullPreviouslyEnabled ? 1 : 0, // Previously off or on.
@@ -448,6 +455,8 @@ public class BatterySaverController implements BatterySaverPolicyListener {
 
             mIsInteractive = isInteractive;
         }
+
+        mCustomActions.setFullBatterySaverEnabled(fullEnabled);
 
         final PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
         if (pmi != null) {
