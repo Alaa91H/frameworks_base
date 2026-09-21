@@ -108,7 +108,8 @@ constructor(
         edgeLightView.paintColor = getColor()
 
         if (!settings.isEnabled ||
-                (!settings.positionTop && !settings.positionSides && !settings.positionBottom)) {
+                (!settings.positionTop && !settings.positionSides && !settings.positionBottom) ||
+                !isDisplayModeEnabled(currentDisplayMode())) {
             edgeLightView.pulseRunning = false
             edgeLightView.visible = false
         }
@@ -131,8 +132,9 @@ constructor(
     }
 
     private fun showEdgeLights() {
-        if (!currentSettings.isEnabled || !isDisplayModeEnabled(currentDisplayMode()) &&
-                pendingDisplayMode == null) return
+        if (!currentSettings.isEnabled) return
+        val mode = pendingDisplayMode ?: currentDisplayMode()
+        if (!isDisplayModeEnabled(mode)) return
         if (!currentSettings.positionTop &&
                 !currentSettings.positionSides &&
                 !currentSettings.positionBottom) return
