@@ -83,6 +83,7 @@ final class BatterySaverCustomActions extends ContentObserver {
     private final SubscriptionManager mSubscriptionManager;
 
     private final ArrayMap<String, Long> mPreviousCpuMaxFreqs = new ArrayMap<>();
+    private final ArrayMap<String, Long> mAppliedCpuMaxFreqs = new ArrayMap<>();
     private final ArrayMap<Integer, Long> mPreviousPowerNetworkTypes = new ArrayMap<>();
     private final ArrayMap<Integer, Long> mPreviousScreenTimeouts = new ArrayMap<>();
 
@@ -212,9 +213,29 @@ final class BatterySaverCustomActions extends ContentObserver {
 
                 long target = Math.max(1L, (hardwareMax * percent) / 100L);
                 target = chooseAvailableFrequency(policyDir, target);
-                // Battery Saver must never raise a pre-existing user/device cap.
+                // Battery Saver must never raise the cap that existed before it became active.
                 target = Math.min(target, previousMax);
-                FileUtils.stringToFile(scalingMaxFile, Long.toString(target));
+
+                final long currentMax = readLong(scalingMaxFile);
+                final Long lastApplied = mAppliedCpuMaxFreqs.get(policyName);
+                final boolean stillOwnsCurrentValue =
+                        lastApplied != null && currentMax == lastApplied;
+
+                // If another component (for example thermal or the vendor Power HAL) changed the
+                // cap after our last write, never raise that newer cap. We may still lower it if
+                // the configured Battery Saver cap is more restrictive.
+                if (!stillOwnsCurrentValue && currentMax > 0) {
+                    target = Math.min(target, currentMax);
+                }
+
+                if (currentMax != target) {
+                    FileUtils.stringToFile(scalingMaxFile, Long.toString(target));
+                    mAppliedCpuMaxFreqs.put(policyName, target);
+                } else if (!stillOwnsCurrentValue) {
+                    // The current value belongs to another component; don't claim ownership just
+                    // because it happens to satisfy our requested cap.
+                    mAppliedCpuMaxFreqs.remove(policyName);
+                }
             } catch (IOException | NumberFormatException e) {
                 Slog.w(TAG, "Unable to cap CPU frequency for " + policyDir, e);
             }
@@ -265,26 +286,57 @@ final class BatterySaverCustomActions extends ContentObserver {
 
     private void restoreCpuMaxFreqs(boolean clearBackup) {
         if (mPreviousCpuMaxFreqs.isEmpty()) {
+            mAppliedCpuMaxFreqs.clear();
             return;
         }
 
-        final ArrayList<String> restored = new ArrayList<>();
+        final ArrayList<String> completed = new ArrayList<>();
         for (Map.Entry<String, Long> entry : mPreviousCpuMaxFreqs.entrySet()) {
+            final String policyName = entry.getKey();
             final File scalingMaxFile = new File(
-                    new File(CPUFREQ_DIR, entry.getKey()), FILE_SCALING_MAX_FREQ);
+                    new File(CPUFREQ_DIR, policyName), FILE_SCALING_MAX_FREQ);
             try {
                 if (!scalingMaxFile.exists()) {
+                    if (clearBackup) {
+                        completed.add(policyName);
+                    }
+                    mAppliedCpuMaxFreqs.remove(policyName);
                     continue;
                 }
+
+                final Long appliedMax = mAppliedCpuMaxFreqs.get(policyName);
+                if (appliedMax == null) {
+                    // We no longer own the current value. On final exit, discard the stale backup
+                    // without overwriting a value managed by another component.
+                    if (clearBackup) {
+                        completed.add(policyName);
+                    }
+                    continue;
+                }
+
+                final long currentMax = readLong(scalingMaxFile);
+                if (currentMax != appliedMax) {
+                    Slog.i(TAG, "Skipping CPU max restore for " + policyName
+                            + "; current value changed from our applied cap");
+                    mAppliedCpuMaxFreqs.remove(policyName);
+                    if (clearBackup) {
+                        completed.add(policyName);
+                    }
+                    continue;
+                }
+
                 FileUtils.stringToFile(scalingMaxFile, Long.toString(entry.getValue()));
-                restored.add(entry.getKey());
-            } catch (IOException e) {
-                Slog.w(TAG, "Unable to restore CPU max frequency for " + entry.getKey(), e);
+                mAppliedCpuMaxFreqs.remove(policyName);
+                if (clearBackup) {
+                    completed.add(policyName);
+                }
+            } catch (IOException | NumberFormatException e) {
+                Slog.w(TAG, "Unable to restore CPU max frequency for " + policyName, e);
             }
         }
 
         if (clearBackup) {
-            for (String policy : restored) {
+            for (String policy : completed) {
                 mPreviousCpuMaxFreqs.remove(policy);
             }
             persistCpuMaxFreqBackups();
