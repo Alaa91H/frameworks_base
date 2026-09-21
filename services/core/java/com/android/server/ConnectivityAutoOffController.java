@@ -5,6 +5,7 @@
 
 package com.android.server;
 
+import android.Manifest;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
@@ -79,9 +80,13 @@ final class ConnectivityAutoOffController {
         final IntentFilter filter = new IntentFilter();
         filter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        filter.addAction(ACTION_WIFI_AUTO_OFF);
-        filter.addAction(ACTION_BLUETOOTH_AUTO_OFF);
         mContext.registerReceiverForAllUsers(mStateReceiver, filter, null, mHandler);
+
+        final IntentFilter alarmFilter = new IntentFilter();
+        alarmFilter.addAction(ACTION_WIFI_AUTO_OFF);
+        alarmFilter.addAction(ACTION_BLUETOOTH_AUTO_OFF);
+        mContext.registerReceiverForAllUsers(
+                mAlarmReceiver, alarmFilter, Manifest.permission.DUMP, mHandler);
 
         mResolver.registerContentObserver(
                 Settings.Global.getUriFor(WIFI_AUTO_OFF_TIMEOUT),
@@ -116,7 +121,15 @@ final class ConnectivityAutoOffController {
                 } else if (state == BluetoothAdapter.STATE_OFF) {
                     cancelBluetoothAlarm();
                 }
-            } else if (ACTION_WIFI_AUTO_OFF.equals(action)) {
+            }
+        }
+    };
+
+    private final BroadcastReceiver mAlarmReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+            if (ACTION_WIFI_AUTO_OFF.equals(action)) {
                 handleWifiAlarm();
             } else if (ACTION_BLUETOOTH_AUTO_OFF.equals(action)) {
                 handleBluetoothAlarm();
