@@ -6,6 +6,7 @@
 package com.android.server;
 
 import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
@@ -35,15 +36,22 @@ final class ConnectivityAutoOffController {
     private static final String TAG = "ConnectivityAutoOff";
     private static final long TIMEOUT_DISABLED = 0L;
 
+    private static final String ACTION_WIFI_AUTO_OFF =
+            "com.android.server.action.WIFI_AUTO_OFF";
+    private static final String ACTION_BLUETOOTH_AUTO_OFF =
+            "com.android.server.action.BLUETOOTH_AUTO_OFF";
+
+    private static final int REQUEST_WIFI_AUTO_OFF = 1;
+    private static final int REQUEST_BLUETOOTH_AUTO_OFF = 2;
+
     private final Context mContext;
     private final ContentResolver mResolver;
     private final Handler mHandler;
     private final AlarmManager mAlarmManager;
     private final WifiManager mWifiManager;
     private final BluetoothAdapter mBluetoothAdapter;
-
-    private final AlarmManager.OnAlarmListener mWifiAlarmListener = this::handleWifiAlarm;
-    private final AlarmManager.OnAlarmListener mBluetoothAlarmListener = this::handleBluetoothAlarm;
+    private final PendingIntent mWifiAlarmIntent;
+    private final PendingIntent mBluetoothAlarmIntent;
 
     ConnectivityAutoOffController(Context context, Handler handler) {
         mContext = context;
@@ -54,12 +62,25 @@ final class ConnectivityAutoOffController {
 
         final BluetoothManager bluetoothManager = context.getSystemService(BluetoothManager.class);
         mBluetoothAdapter = bluetoothManager != null ? bluetoothManager.getAdapter() : null;
+
+        mWifiAlarmIntent = PendingIntent.getBroadcast(
+                context,
+                REQUEST_WIFI_AUTO_OFF,
+                new Intent(ACTION_WIFI_AUTO_OFF).setPackage(context.getPackageName()),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        mBluetoothAlarmIntent = PendingIntent.getBroadcast(
+                context,
+                REQUEST_BLUETOOTH_AUTO_OFF,
+                new Intent(ACTION_BLUETOOTH_AUTO_OFF).setPackage(context.getPackageName()),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
     void start() {
         final IntentFilter filter = new IntentFilter();
         filter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+        filter.addAction(ACTION_WIFI_AUTO_OFF);
+        filter.addAction(ACTION_BLUETOOTH_AUTO_OFF);
         mContext.registerReceiverForAllUsers(mStateReceiver, filter, null, mHandler);
 
         mResolver.registerContentObserver(
@@ -95,6 +116,10 @@ final class ConnectivityAutoOffController {
                 } else if (state == BluetoothAdapter.STATE_OFF) {
                     cancelBluetoothAlarm();
                 }
+            } else if (ACTION_WIFI_AUTO_OFF.equals(action)) {
+                handleWifiAlarm();
+            } else if (ACTION_BLUETOOTH_AUTO_OFF.equals(action)) {
+                handleBluetoothAlarm();
             }
         }
     };
@@ -135,9 +160,7 @@ final class ConnectivityAutoOffController {
         mAlarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 SystemClock.elapsedRealtime() + timeout,
-                TAG + ":wifi",
-                mWifiAlarmListener,
-                mHandler);
+                mWifiAlarmIntent);
     }
 
     private void scheduleBluetoothAlarm() {
@@ -149,20 +172,18 @@ final class ConnectivityAutoOffController {
         mAlarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 SystemClock.elapsedRealtime() + timeout,
-                TAG + ":bluetooth",
-                mBluetoothAlarmListener,
-                mHandler);
+                mBluetoothAlarmIntent);
     }
 
     private void cancelWifiAlarm() {
         if (mAlarmManager != null) {
-            mAlarmManager.cancel(mWifiAlarmListener);
+            mAlarmManager.cancel(mWifiAlarmIntent);
         }
     }
 
     private void cancelBluetoothAlarm() {
         if (mAlarmManager != null) {
-            mAlarmManager.cancel(mBluetoothAlarmListener);
+            mAlarmManager.cancel(mBluetoothAlarmIntent);
         }
     }
 
