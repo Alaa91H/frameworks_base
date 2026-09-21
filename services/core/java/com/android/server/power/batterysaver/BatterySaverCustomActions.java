@@ -52,7 +52,6 @@ final class BatterySaverCustomActions extends ContentObserver {
     private static final long NO_TIMEOUT_BACKUP = -1L;
     private static final int NO_USER = -10_000;
 
-    private final Context mContext;
     private final ContentResolver mResolver;
     private final TelephonyManager mTelephonyManager;
     private final SubscriptionManager mSubscriptionManager;
@@ -63,7 +62,6 @@ final class BatterySaverCustomActions extends ContentObserver {
 
     BatterySaverCustomActions(Context context, Handler handler) {
         super(handler);
-        mContext = context;
         mResolver = context.getContentResolver();
         mTelephonyManager = context.getSystemService(TelephonyManager.class);
         mSubscriptionManager = context.getSystemService(SubscriptionManager.class);
