@@ -134,6 +134,7 @@ private val TileViewModel.traceName
  * @param detailsViewModel An optional [DetailsViewModel] used to handle navigation to a detailed
  *   view when a tile is clicked, if applicable.
  * @param enableRevealEffect If `true`, the tiles will animate using the reveal animation.
+ * @param classicStyle If `true`, tiles use the compact classic icon-and-label presentation.
  */
 @Composable
 fun ContentScope.Tile(
@@ -148,6 +149,7 @@ fun ContentScope.Tile(
     requestToggleTextFeedback: (TileSpec) -> Unit = {},
     detailsViewModel: DetailsViewModel?,
     enableRevealEffect: Boolean = false,
+    classicStyle: Boolean = false,
 ) {
     trace(tile.traceName) {
         val currentBounceableInfo by rememberUpdatedState(bounceableInfo)
@@ -177,6 +179,7 @@ fun ContentScope.Tile(
 
         // TODO(b/361789146): Draw the shapes instead of clipping
         val tileShape by TileDefaults.animateTileShapeAsState(uiState)
+        val containerShape = if (classicStyle) RoundedCornerShape(0.dp) else tileShape
         val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
         val isDualTarget = uiState.handlesToggleClick
         val interactionSource = remember { MutableInteractionSource() }
@@ -220,8 +223,8 @@ fun ContentScope.Tile(
         ) { modifier ->
             TileExpandable(
                 expandable = expandable,
-                color = { animatedColor },
-                shape = tileShape,
+                color = { if (classicStyle) Color.Transparent else animatedColor },
+                shape = containerShape,
                 squishiness = squishiness,
                 hapticsViewModel = hapticsViewModel,
                 modifier =
@@ -229,7 +232,7 @@ fun ContentScope.Tile(
                         .then(surfaceRevealModifier)
                         .borderOnFocus(
                             color = MaterialTheme.colorScheme.secondary,
-                            tileShape.topEnd,
+                            containerShape.topEnd,
                         )
                         .sysuiResTag("tile_expandable")
                         .fillMaxWidth()
@@ -269,6 +272,7 @@ fun ContentScope.Tile(
                 val bounceContainer = uiState.isToggleable && (iconOnly || !isDualTarget)
                 TileContainer(
                     interactionSource = interactionSource.takeIf { bounceContainer },
+                    height = if (classicStyle) ClassicTileHeight else TileHeight,
                     onClick = onClick@{
                             if (!isClickable) return@onClick
 
@@ -309,7 +313,18 @@ fun ContentScope.Tile(
                     modifier = contentRevealModifier,
                 ) {
                     val iconProvider: Context.() -> Icon = { getTileIcon(icon = icon) }
-                    if (iconOnly) {
+                    if (classicStyle) {
+                        ClassicTileContent(
+                            label = uiState.label,
+                            secondaryLabel = uiState.secondaryLabel,
+                            iconProvider = iconProvider,
+                            colors = colors,
+                            modifier =
+                                Modifier.align(Alignment.TopCenter).bounceScale {
+                                    currentBounceableInfo.bounceable.iconBounceScale
+                                },
+                        )
+                    } else if (iconOnly) {
                         SmallTileContent(
                             iconProvider = iconProvider,
                             color = colors.icon,
@@ -386,12 +401,13 @@ fun TileContainer(
     isDualTarget: Boolean,
     interactionSource: MutableInteractionSource?,
     modifier: Modifier = Modifier,
+    height: Dp = TileHeight,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(
         modifier =
             modifier
-                .height(TileHeight)
+                .height(height)
                 .fillMaxWidth()
                 .tileCombinedClickable(
                     onClick = onClick ?: {},
@@ -515,12 +531,16 @@ data class TileColors(
     val label: Color,
     val secondaryLabel: Color,
     val icon: Color,
+    val classicLabel: Color,
+    val classicSecondaryLabel: Color,
 )
 
 @VisibleForTesting
 object TileMotionTestKeys {
     val Squishness = MotionTestValueKey<Float>("tile_squishiness")
 }
+
+private val ClassicTileHeight = TileHeight + 32.dp
 
 private object TileDefaults {
     /** An active tile uses the active color as background */
@@ -533,6 +553,8 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onPrimary,
             secondaryLabel = MaterialTheme.colorScheme.onPrimary,
             icon = MaterialTheme.colorScheme.onPrimary,
+            classicLabel = MaterialTheme.colorScheme.onSurface,
+            classicSecondaryLabel = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f),
         )
 
     /** An active tile with dual target only show the active color on the icon */
@@ -545,6 +567,8 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onPrimary,
+            classicLabel = MaterialTheme.colorScheme.onSurface,
+            classicSecondaryLabel = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f),
         )
 
     @Composable
@@ -556,6 +580,8 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,
+            classicLabel = MaterialTheme.colorScheme.onSurface,
+            classicSecondaryLabel = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f),
         )
 
     @Composable
@@ -567,6 +593,8 @@ private object TileDefaults {
             label = MaterialTheme.colorScheme.onSurface,
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,
+            classicLabel = MaterialTheme.colorScheme.onSurface,
+            classicSecondaryLabel = MaterialTheme.colorScheme.onSurface.copy(alpha = .8f),
         )
 
     @Composable
@@ -580,6 +608,8 @@ private object TileDefaults {
             label = onSurfaceVariantColor,
             secondaryLabel = onSurfaceVariantColor,
             icon = onSurfaceVariantColor,
+            classicLabel = onSurfaceVariantColor,
+            classicSecondaryLabel = onSurfaceVariantColor,
         )
     }
 
