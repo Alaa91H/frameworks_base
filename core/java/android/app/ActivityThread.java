@@ -7641,6 +7641,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
         // Perform updates.
         r.overrideConfig = overrideConfig;
+        applyQrScannerLayoutDirectionOverride(r);
         r.mActivityWindowInfo.set(activityWindowInfo);
         r.mDisplayId = displayId;
 
