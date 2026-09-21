@@ -128,11 +128,14 @@ final class BatterySaverCustomActions extends ContentObserver {
         loadScreenTimeoutBackups();
     }
 
+    void prepareForLowPowerTransition() {
+        snapshotCpuMaxFreqs();
+    }
+
     void setFullBatterySaverEnabled(boolean enabled) {
         mFullBatterySaverEnabled = enabled;
         apply();
     }
-
 
     @Override
     public void onChange(boolean selfChange) {
@@ -159,6 +162,43 @@ final class BatterySaverCustomActions extends ContentObserver {
         final int timeoutMs = Settings.Global.getInt(mResolver, SETTING_SCREEN_TIMEOUT, -1);
         // Compatibility with the first implementation where this setting was a boolean switch.
         return timeoutMs == 1 ? 30_000 : timeoutMs;
+    }
+
+    private void snapshotCpuMaxFreqs() {
+        final File cpuFreqRoot = new File(CPUFREQ_DIR);
+        final File[] policyDirs = cpuFreqRoot.listFiles(
+                file -> file.isDirectory() && file.getName().startsWith("policy"));
+        if (policyDirs == null || policyDirs.length == 0) {
+            return;
+        }
+
+        boolean backupChanged = false;
+        for (File policyDir : policyDirs) {
+            final String policyName = policyDir.getName();
+            if (mPreviousCpuMaxFreqs.containsKey(policyName)) {
+                continue;
+            }
+
+            final File scalingMaxFile = new File(policyDir, FILE_SCALING_MAX_FREQ);
+            if (!scalingMaxFile.exists()) {
+                continue;
+            }
+
+            try {
+                final long currentMax = readLong(scalingMaxFile);
+                if (currentMax <= 0) {
+                    continue;
+                }
+                mPreviousCpuMaxFreqs.put(policyName, currentMax);
+                backupChanged = true;
+            } catch (IOException | NumberFormatException e) {
+                Slog.w(TAG, "Unable to snapshot CPU max frequency for " + policyDir, e);
+            }
+        }
+
+        if (backupChanged) {
+            persistCpuMaxFreqBackups();
+        }
     }
 
     private void updateCpuLimit(int requestedPercent) {
