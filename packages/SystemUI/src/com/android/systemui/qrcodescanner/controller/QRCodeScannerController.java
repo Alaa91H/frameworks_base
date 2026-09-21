@@ -307,7 +307,8 @@ public class QRCodeScannerController implements
             // which makes the four brackets face outwards. Mark only the GMS scanner launch so
             // the framework can keep its physical viewfinder geometry LTR without changing the
             // user's locale or affecting other QR scanner providers.
-            if (GOOGLE_PLAY_SERVICES_PACKAGE.equals(componentName.getPackageName())) {
+            if (componentName != null
+                    && GOOGLE_PLAY_SERVICES_PACKAGE.equals(componentName.getPackageName())) {
                 intent.putExtra(EXTRA_FORCE_LTR_LAYOUT_DIRECTION, true);
             }
         }
