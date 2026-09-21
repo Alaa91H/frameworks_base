@@ -16,13 +16,17 @@
 package com.android.server.power.batterysaver;
 
 import android.app.ActivityManager;
+import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.database.ContentObserver;
 import android.hardware.power.Mode;
 import android.os.FileUtils;
 import android.os.Handler;
 import android.os.PowerManagerInternal;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -52,6 +56,9 @@ final class BatterySaverCustomActions extends ContentObserver {
 
     private static final String SETTING_CPU_MAX_FREQ_BACKUP =
             "low_power_cpu_max_freq_backup";
+    private static final String SETTING_SCREEN_TIMEOUT_BACKUPS =
+            "low_power_screen_timeout_backups";
+    // Legacy single-user backup keys, kept only for migration.
     private static final String SETTING_SCREEN_TIMEOUT_BACKUP =
             "low_power_screen_timeout_backup";
     private static final String SETTING_SCREEN_TIMEOUT_BACKUP_USER =
@@ -69,20 +76,38 @@ final class BatterySaverCustomActions extends ContentObserver {
     private static final long NO_TIMEOUT_BACKUP = -1L;
     private static final int NO_USER = -10_000;
 
+    private final Context mContext;
     private final ContentResolver mResolver;
+    private final Handler mHandler;
     private final TelephonyManager mTelephonyManager;
     private final SubscriptionManager mSubscriptionManager;
 
     private final ArrayMap<String, Long> mPreviousCpuMaxFreqs = new ArrayMap<>();
     private final ArrayMap<Integer, Long> mPreviousPowerNetworkTypes = new ArrayMap<>();
+    private final ArrayMap<Integer, Long> mPreviousScreenTimeouts = new ArrayMap<>();
 
+    private final ContentObserver mScreenTimeoutObserver;
+    private final BroadcastReceiver mUserSwitchReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            updateScreenTimeout(getScreenTimeoutOverride());
+        }
+    };
     private boolean mFullBatterySaverEnabled;
 
     BatterySaverCustomActions(Context context, Handler handler) {
         super(handler);
+        mContext = context;
         mResolver = context.getContentResolver();
+        mHandler = handler;
         mTelephonyManager = context.getSystemService(TelephonyManager.class);
         mSubscriptionManager = context.getSystemService(SubscriptionManager.class);
+        mScreenTimeoutObserver = new ContentObserver(handler) {
+            @Override
+            public void onChange(boolean selfChange) {
+                handleScreenTimeoutChanged();
+            }
+        };
     }
 
     void systemReady() {
@@ -92,14 +117,21 @@ final class BatterySaverCustomActions extends ContentObserver {
                 Settings.Global.getUriFor(SETTING_DISABLE_5G), false, this);
         mResolver.registerContentObserver(
                 Settings.Global.getUriFor(SETTING_SCREEN_TIMEOUT), false, this);
+        mResolver.registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SCREEN_OFF_TIMEOUT), false,
+                mScreenTimeoutObserver, UserHandle.USER_ALL);
+        final IntentFilter userFilter = new IntentFilter(Intent.ACTION_USER_SWITCHED);
+        mContext.registerReceiverForAllUsers(mUserSwitchReceiver, userFilter, null, mHandler);
         loadCpuMaxFreqBackups();
         loadNetworkTypeBackups();
+        loadScreenTimeoutBackups();
     }
 
     void setFullBatterySaverEnabled(boolean enabled) {
         mFullBatterySaverEnabled = enabled;
         apply();
     }
+
 
     @Override
     public void onChange(boolean selfChange) {
@@ -111,17 +143,21 @@ final class BatterySaverCustomActions extends ContentObserver {
                 ? Settings.Global.getInt(mResolver, SETTING_CPU_LIMIT_PERCENT, -1) : -1;
         final boolean disable5g = mFullBatterySaverEnabled
                 && Settings.Global.getInt(mResolver, SETTING_DISABLE_5G, 0) != 0;
-        int screenTimeoutMs = mFullBatterySaverEnabled
-                ? Settings.Global.getInt(mResolver, SETTING_SCREEN_TIMEOUT, -1) : -1;
-
-        // Compatibility with the first implementation where this setting was a boolean switch.
-        if (screenTimeoutMs == 1) {
-            screenTimeoutMs = 30_000;
-        }
+        final int screenTimeoutMs = getScreenTimeoutOverride();
 
         updateCpuLimit(cpuLimitPercent);
         update5g(disable5g);
         updateScreenTimeout(screenTimeoutMs);
+    }
+
+    private int getScreenTimeoutOverride() {
+        if (!mFullBatterySaverEnabled) {
+            return -1;
+        }
+
+        final int timeoutMs = Settings.Global.getInt(mResolver, SETTING_SCREEN_TIMEOUT, -1);
+        // Compatibility with the first implementation where this setting was a boolean switch.
+        return timeoutMs == 1 ? 30_000 : timeoutMs;
     }
 
     private void updateCpuLimit(int requestedPercent) {
@@ -353,41 +389,118 @@ final class BatterySaverCustomActions extends ContentObserver {
         }
 
         final int userId = ActivityManager.getCurrentUser();
-        final long existingBackup = Settings.Global.getLong(
-                mResolver, SETTING_SCREEN_TIMEOUT_BACKUP, NO_TIMEOUT_BACKUP);
-        final int backupUser = Settings.Global.getInt(
-                mResolver, SETTING_SCREEN_TIMEOUT_BACKUP_USER, NO_USER);
-
-        if (existingBackup == NO_TIMEOUT_BACKUP || backupUser != userId) {
+        if (!mPreviousScreenTimeouts.containsKey(userId)) {
             final long currentTimeout = Settings.System.getLongForUser(
                     mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
-            Settings.Global.putLong(
-                    mResolver, SETTING_SCREEN_TIMEOUT_BACKUP, currentTimeout);
-            Settings.Global.putInt(
-                    mResolver, SETTING_SCREEN_TIMEOUT_BACKUP_USER, userId);
+            mPreviousScreenTimeouts.put(userId, currentTimeout);
+            persistScreenTimeoutBackups();
         }
 
         Settings.System.putLongForUser(
                 mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
     }
 
-    private void restoreScreenTimeout() {
-        final long previousTimeout = Settings.Global.getLong(
-                mResolver, SETTING_SCREEN_TIMEOUT_BACKUP, NO_TIMEOUT_BACKUP);
-        final int backupUser = Settings.Global.getInt(
-                mResolver, SETTING_SCREEN_TIMEOUT_BACKUP_USER, NO_USER);
-        if (previousTimeout == NO_TIMEOUT_BACKUP || backupUser == NO_USER) {
+    private void handleScreenTimeoutChanged() {
+        if (!mFullBatterySaverEnabled) {
             return;
         }
 
-        if (Settings.System.putLongForUser(
-                mResolver, Settings.System.SCREEN_OFF_TIMEOUT,
-                previousTimeout, backupUser)) {
+        final int timeoutMs = getScreenTimeoutOverride();
+        if (timeoutMs != 15_000 && timeoutMs != 30_000) {
+            return;
+        }
+
+        final int userId = ActivityManager.getCurrentUser();
+        final long currentTimeout = Settings.System.getLongForUser(
+                mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
+        if (currentTimeout == timeoutMs) {
+            return;
+        }
+
+        // Preserve changes made while Battery Saver is active so they become the normal
+        // timeout after Battery Saver exits, then keep the temporary saver timeout applied.
+        mPreviousScreenTimeouts.put(userId, currentTimeout);
+        persistScreenTimeoutBackups();
+        Settings.System.putLongForUser(
+                mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
+    }
+
+    private void restoreScreenTimeout() {
+        if (mPreviousScreenTimeouts.isEmpty()) {
+            return;
+        }
+
+        final ArrayList<Integer> restored = new ArrayList<>();
+        for (Map.Entry<Integer, Long> entry : mPreviousScreenTimeouts.entrySet()) {
+            if (Settings.System.putLongForUser(
+                    mResolver, Settings.System.SCREEN_OFF_TIMEOUT,
+                    entry.getValue(), entry.getKey())) {
+                restored.add(entry.getKey());
+            }
+        }
+
+        for (int userId : restored) {
+            mPreviousScreenTimeouts.remove(userId);
+        }
+        persistScreenTimeoutBackups();
+    }
+
+    private void loadScreenTimeoutBackups() {
+        mPreviousScreenTimeouts.clear();
+
+        final String serialized = Settings.Global.getString(
+                mResolver, SETTING_SCREEN_TIMEOUT_BACKUPS);
+        if (serialized != null && !serialized.isEmpty()) {
+            for (String item : serialized.split(";")) {
+                final int separator = item.indexOf('=');
+                if (separator <= 0 || separator >= item.length() - 1) {
+                    continue;
+                }
+                try {
+                    final int userId = Integer.parseInt(item.substring(0, separator));
+                    final long timeout = Long.parseLong(item.substring(separator + 1));
+                    if (timeout >= 0) {
+                        mPreviousScreenTimeouts.put(userId, timeout);
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Ignore malformed stale entries.
+                }
+            }
+        }
+
+        final long legacyTimeout = Settings.Global.getLong(
+                mResolver, SETTING_SCREEN_TIMEOUT_BACKUP, NO_TIMEOUT_BACKUP);
+        final int legacyUser = Settings.Global.getInt(
+                mResolver, SETTING_SCREEN_TIMEOUT_BACKUP_USER, NO_USER);
+        if (legacyTimeout != NO_TIMEOUT_BACKUP && legacyUser != NO_USER
+                && !mPreviousScreenTimeouts.containsKey(legacyUser)) {
+            mPreviousScreenTimeouts.put(legacyUser, legacyTimeout);
+        }
+
+        if (legacyTimeout != NO_TIMEOUT_BACKUP || legacyUser != NO_USER) {
             Settings.Global.putLong(
                     mResolver, SETTING_SCREEN_TIMEOUT_BACKUP, NO_TIMEOUT_BACKUP);
             Settings.Global.putInt(
                     mResolver, SETTING_SCREEN_TIMEOUT_BACKUP_USER, NO_USER);
+            persistScreenTimeoutBackups();
         }
+    }
+
+    private void persistScreenTimeoutBackups() {
+        if (mPreviousScreenTimeouts.isEmpty()) {
+            Settings.Global.putString(mResolver, SETTING_SCREEN_TIMEOUT_BACKUPS, null);
+            return;
+        }
+
+        final StringBuilder serialized = new StringBuilder();
+        for (Map.Entry<Integer, Long> entry : mPreviousScreenTimeouts.entrySet()) {
+            if (serialized.length() > 0) {
+                serialized.append(';');
+            }
+            serialized.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        Settings.Global.putString(
+                mResolver, SETTING_SCREEN_TIMEOUT_BACKUPS, serialized.toString());
     }
 
     private void loadCpuMaxFreqBackups() {
