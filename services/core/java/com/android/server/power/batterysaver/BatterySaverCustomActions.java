@@ -19,13 +19,17 @@ import android.app.ActivityManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.ContentObserver;
+import android.hardware.power.Mode;
 import android.os.FileUtils;
 import android.os.Handler;
+import android.os.PowerManagerInternal;
 import android.provider.Settings;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
 import android.util.Slog;
+
+import com.android.server.LocalServices;
 
 import java.io.File;
 import java.io.IOException;
@@ -123,7 +127,15 @@ final class BatterySaverCustomActions extends ContentObserver {
     private void updateCpuLimit(int requestedPercent) {
         if (requestedPercent < CPU_LIMIT_MIN_PERCENT
                 || requestedPercent > CPU_LIMIT_MAX_PERCENT) {
-            restoreCpuMaxFreqs();
+            if (mFullBatterySaverEnabled) {
+                // If the custom limit is disabled while Battery Saver is still active, remove our
+                // cap but keep the original backup for the eventual exit, then let the Power HAL
+                // re-assert its normal LOW_POWER behavior.
+                restoreCpuMaxFreqs(false);
+                reapplyLowPowerMode();
+            } else {
+                restoreCpuMaxFreqs(true);
+            }
             return;
         }
 
@@ -215,7 +227,7 @@ final class BatterySaverCustomActions extends ContentObserver {
         return lowest != Long.MAX_VALUE ? lowest : target;
     }
 
-    private void restoreCpuMaxFreqs() {
+    private void restoreCpuMaxFreqs(boolean clearBackup) {
         if (mPreviousCpuMaxFreqs.isEmpty()) {
             return;
         }
@@ -235,10 +247,19 @@ final class BatterySaverCustomActions extends ContentObserver {
             }
         }
 
-        for (String policy : restored) {
-            mPreviousCpuMaxFreqs.remove(policy);
+        if (clearBackup) {
+            for (String policy : restored) {
+                mPreviousCpuMaxFreqs.remove(policy);
+            }
+            persistCpuMaxFreqBackups();
         }
-        persistCpuMaxFreqBackups();
+    }
+
+    private void reapplyLowPowerMode() {
+        final PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
+        if (pmi != null) {
+            pmi.setPowerMode(Mode.LOW_POWER, true);
+        }
     }
 
     private long readLong(File file) throws IOException, NumberFormatException {
