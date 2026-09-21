@@ -17,10 +17,13 @@
 package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
 import android.content.Context
+import android.graphics.Matrix
+import android.graphics.Path
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.Drawable
 import android.text.TextUtils
+import android.util.PathParser
 import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.graphics.res.animatedVectorResource
@@ -69,6 +72,7 @@ import androidx.compose.ui.graphics.ColorProducer
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.DefaultAlpha
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
@@ -122,11 +126,30 @@ fun ClassicTileContent(
     label: String,
     secondaryLabel: String?,
     iconProvider: Context.() -> Icon,
+    iconShapeKey: String,
     colors: TileColors,
     modifier: Modifier = Modifier,
 ) {
+    val isNoBackground = iconShapeKey in QSTileIconShapes.NO_BACKGROUND_KEYS
+    val iconShape = remember(iconShapeKey) { QSTileIconShapes.shapeForKey(iconShapeKey) }
+
+    val overlayPathData = remember(iconShapeKey) {
+        QSTileIconShapes.OVERLAY_BY_KEY[iconShapeKey]
+    }
+    val overlayPath = remember(overlayPathData) {
+        overlayPathData?.let { pathData ->
+            try {
+                PathParser.createPathFromPathData(pathData)
+            } catch (_: RuntimeException) {
+                null
+            }
+        }
+    }
+
     val animatedBackgroundColor by
         animateColorAsState(colors.background, label = "QSClassicTileBackgroundColor")
+    val animatedOutlineColor by
+        animateColorAsState(colors.outline, label = "QSClassicTileOutlineColor")
     val animatedLabelColor by
         animateColorAsState(colors.classicLabel, label = "QSClassicTileLabelColor")
     val animatedSecondaryLabelColor by
@@ -143,12 +166,28 @@ fun ClassicTileContent(
         Box(
             modifier =
                 Modifier.size(CommonTileDefaults.TileHeight)
-                    .clip(RoundedCornerShape(percent = 50))
-                    .drawBehind { drawRect(animatedBackgroundColor) },
+                    .thenIf(!isNoBackground) {
+                        Modifier.clip(iconShape).drawBehind { drawRect(animatedBackgroundColor) }
+                    }
+                    .thenIf(overlayPath != null) {
+                        Modifier.drawWithContent {
+                            drawContent()
+                            overlayPath?.let { path ->
+                                val scaledPath = Path(path)
+                                val matrix = Matrix()
+                                matrix.setScale(size.width / 100f, size.height / 100f)
+                                scaledPath.transform(matrix)
+                                drawPath(
+                                    path = scaledPath.asComposePath(),
+                                    color = animatedOutlineColor,
+                                )
+                            }
+                        }
+                    },
         ) {
             SmallTileContent(
                 iconProvider = iconProvider,
-                color = colors.icon,
+                color = if (isNoBackground) animatedOutlineColor else colors.icon,
                 size = { CommonTileDefaults.LargeTileIconSize },
                 modifier = Modifier.align(Alignment.Center),
             )
