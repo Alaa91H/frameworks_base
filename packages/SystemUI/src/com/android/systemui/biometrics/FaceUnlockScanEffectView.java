@@ -140,6 +140,9 @@ public final class FaceUnlockScanEffectView extends View {
 
                 @Override
                 public void onUserSwitchComplete(int userId) {
+                    if (mKeyguardUpdateMonitor != null) {
+                        mFaceRunning = mKeyguardUpdateMonitor.isFaceAuthOrDetectionRunning();
+                    }
                     reloadSetting();
                 }
             };
