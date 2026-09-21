@@ -17,9 +17,9 @@ package com.android.systemui.edgelight
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
-import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
 import android.content.Context
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -30,29 +30,34 @@ import android.graphics.PathMeasure
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.SweepGradient
+import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import androidx.core.view.isVisible
 import com.android.systemui.res.R
-import kotlin.math.sin
-import kotlin.math.cos
 import kotlin.math.PI
+import kotlin.math.max
+import kotlin.math.sin
 import kotlin.random.Random
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
-import android.graphics.BlurMaskFilter
 
+/**
+ * Full-screen edge light renderer.
+ *
+ * The renderer intentionally keeps the location selection independent from the visual style:
+ * top, sides and bottom can be enabled in any combination. Rounded style only changes the
+ * geometry at corners; it does not force any zone on.
+ */
 class EdgeLightView(context: Context) : FrameLayout(context) {
 
     var userStrokeWidth: Int = 8
         set(value) {
             field = value.coerceIn(2, 32)
-            edgePaint.strokeWidth = field * resources.displayMetrics.density
+            edgePaint.strokeWidth = baseStrokeWidth()
             invalidate()
         }
 
     var userSpread: Float = EDGE_LIGHT_DEFAULT_SPREAD
         set(value) {
-            field = value.coerceIn(0.05f, 1f)
+            field = value.coerceIn(0f, 1f)
             invalidate()
         }
 
@@ -70,47 +75,72 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         }
 
     var animationEffect: String = EFFECT_NONE
+        set(value) {
+            field = value
+            invalidate()
+        }
 
-    private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.BUTT
-    }
+    var auroraColorMode: String = AURORA_SINGLE
+        set(value) {
+            field = if (value == AURORA_MULTI) AURORA_MULTI else AURORA_SINGLE
+            invalidate()
+        }
 
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-    }
+    var showTop: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
 
-    private val totalPulseDuration =
-        resources.getInteger(R.integer.doze_pulse_duration_visible).toLong()
+    var showSides: Boolean = true
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    var showBottom: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
 
     var userPulseCount: Int = 3
         set(value) {
             field = value.coerceIn(1, 5)
         }
 
+    private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+
+    private val totalPulseDuration =
+        resources.getInteger(R.integer.doze_pulse_duration_visible).toLong()
+
     private val fadeFraction = 0.2f
-    private val MIN_SEGMENTS = 3
+    private val minSegments = 3
 
     private var pulseAnimator: ValueAnimator? = null
     private var rainbowAnimator: ValueAnimator? = null
     private var effectAnimator: ValueAnimator? = null
-    private var rainbowRotation: Float = 0f
-    private var effectProgress: Float = 0f
+    private var rainbowRotation = 0f
+    private var effectProgress = 0f
 
     private val sparkles = mutableListOf<Sparkle>()
-
-    private val roundedPath = Path()
-    private val roundedRect = RectF()
-    private var cornerRadius: Float = 0f
-    private var pathLength: Float = 0f
-
+    private var cornerRadius = 0f
     private var useRainbowGradient = false
-
-    private var glowBaseColor: Int = Color.WHITE
+    private var glowBaseColor = Color.WHITE
 
     var visible: Boolean
         get() = isVisible
-        set(value) { isVisible = value }
+        set(value) {
+            isVisible = value
+        }
 
     var paintColor: Int
         get() = edgePaint.color
@@ -154,11 +184,418 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
             resources.getDimension(
                 resources.getIdentifier("rounded_corner_radius", "dimen", "android")
             )
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             32f * resources.displayMetrics.density
         }
 
-        edgePaint.strokeWidth = userStrokeWidth * resources.displayMetrics.density
+        edgePaint.strokeWidth = baseStrokeWidth()
+    }
+
+    override fun onDetachedFromWindow() {
+        stopRainbowAnimation()
+        stopEffectAnimation()
+        stopPulse()
+        super.onDetachedFromWindow()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (useRainbowGradient) updateRainbowGradient()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (width <= 0 || height <= 0 || !hasActiveZone()) return
+
+        if (animationEffect != EFFECT_BREATHING) {
+            edgePaint.strokeWidth = baseStrokeWidth()
+        }
+
+        val paths = buildActivePaths()
+        if (paths.isEmpty()) return
+
+        when (animationEffect) {
+            EFFECT_BREATHING -> {
+                applyBreathingEffect()
+                drawPaths(canvas, paths, edgePaint)
+            }
+            EFFECT_WAVE -> drawWaveEffect(canvas, paths)
+            EFFECT_SPARKLE -> drawSparkleEffect(canvas, paths)
+            EFFECT_CHASE -> drawChaseEffect(canvas, paths)
+            EFFECT_COMET -> drawCometEffect(canvas, paths)
+            EFFECT_AURORA -> drawAuroraEffect(canvas, paths)
+            else -> {
+                edgePaint.alpha = 255
+                edgePaint.maskFilter = null
+                drawPaths(canvas, paths, edgePaint)
+            }
+        }
+
+        // Aurora already has several luminous high-resolution layers, but the normal glow control
+        // remains additive so the user's spread/intensity preferences still work.
+        drawGlow(canvas)
+    }
+
+    private fun hasActiveZone(): Boolean = showTop || showSides || showBottom
+
+    private fun baseStrokeWidth(): Float =
+        userStrokeWidth * resources.displayMetrics.density
+
+    /**
+     * Builds independent paths for each selected zone. Keeping them independent makes moving
+     * effects loop continuously inside the selected area instead of disappearing while an
+     * animation travels through a disabled edge.
+     */
+    private fun buildActivePaths(): List<Path> {
+        val strokeHalf = edgePaint.strokeWidth / 2f
+        val left = strokeHalf
+        val top = strokeHalf
+        val right = width.toFloat() - strokeHalf
+        val bottom = height.toFloat() - strokeHalf
+        if (right <= left || bottom <= top) return emptyList()
+
+        val rounded = isFrameStyle(edgeStyle)
+        val radius = if (rounded) {
+            cornerRadius.coerceAtMost((right - left) / 2f).coerceAtMost((bottom - top) / 2f)
+        } else {
+            0f
+        }
+        val paths = mutableListOf<Path>()
+
+        if (showTop) {
+            paths += Path().apply {
+                moveTo(left + radius, top)
+                lineTo(right - radius, top)
+            }
+        }
+
+        if (showSides) {
+            paths += Path().apply {
+                moveTo(left, top + radius)
+                lineTo(left, bottom - radius)
+            }
+            paths += Path().apply {
+                moveTo(right, top + radius)
+                lineTo(right, bottom - radius)
+            }
+        }
+
+        if (showBottom) {
+            paths += Path().apply {
+                moveTo(left + radius, bottom)
+                lineTo(right - radius, bottom)
+            }
+        }
+
+        if (rounded && radius > 0f) {
+            if (showTop && showSides) {
+                paths += Path().apply {
+                    arcTo(
+                        RectF(left, top, left + radius * 2f, top + radius * 2f),
+                        180f,
+                        90f,
+                        false,
+                    )
+                }
+                paths += Path().apply {
+                    arcTo(
+                        RectF(right - radius * 2f, top, right, top + radius * 2f),
+                        270f,
+                        90f,
+                        false,
+                    )
+                }
+            }
+            if (showBottom && showSides) {
+                paths += Path().apply {
+                    arcTo(
+                        RectF(left, bottom - radius * 2f, left + radius * 2f, bottom),
+                        90f,
+                        90f,
+                        false,
+                    )
+                }
+                paths += Path().apply {
+                    arcTo(
+                        RectF(right - radius * 2f, bottom - radius * 2f, right, bottom),
+                        0f,
+                        90f,
+                        false,
+                    )
+                }
+            }
+        }
+
+        return paths
+    }
+
+    private fun drawPaths(canvas: Canvas, paths: List<Path>, paint: Paint) {
+        paths.forEach { canvas.drawPath(it, paint) }
+    }
+
+    private fun applyBreathingEffect() {
+        val normalized = (sin(effectProgress * 2.0 * PI).toFloat() + 1f) / 2f
+        edgePaint.alpha = (155 + normalized * 100f).toInt().coerceIn(0, 255)
+        edgePaint.strokeWidth = baseStrokeWidth() * (0.7f + normalized * 0.6f)
+        edgePaint.maskFilter = null
+    }
+
+    private fun drawWaveEffect(canvas: Canvas, paths: List<Path>) {
+        edgePaint.alpha = 255
+        edgePaint.maskFilter = null
+        val amplitude = baseStrokeWidth() * 0.75f
+        paths.forEachIndexed { index, path ->
+            val wave = buildWavyPath(path, amplitude, effectProgress + index * 0.13f)
+            canvas.drawPath(wave, edgePaint)
+        }
+    }
+
+    private fun drawSparkleEffect(canvas: Canvas, paths: List<Path>) {
+        edgePaint.alpha = 90
+        edgePaint.maskFilter = null
+        drawPaths(canvas, paths, edgePaint)
+
+        sparkles.removeAll { it.lifetime <= 0f }
+        if (sparkles.size < 24 && Random.nextFloat() < 0.38f) {
+            randomPointOnPaths(paths)?.let { (x, y) ->
+                sparkles += Sparkle(
+                    x = x,
+                    y = y,
+                    lifetime = 1f,
+                    maxSize = baseStrokeWidth() * (1.5f + Random.nextFloat() * 2.5f),
+                )
+            }
+        }
+
+        val sparklePaint = Paint(edgePaint).apply {
+            shader = null
+            strokeCap = Paint.Cap.ROUND
+        }
+        sparkles.forEach { sparkle ->
+            sparkle.lifetime -= 0.035f
+            sparklePaint.alpha = (sparkle.lifetime * 255f).toInt().coerceIn(0, 255)
+            sparklePaint.strokeWidth =
+                sparkle.maxSize * sin(sparkle.lifetime.toDouble() * PI).toFloat()
+            sparklePaint.color = effectiveGlowBaseColor()
+            canvas.drawPoint(sparkle.x, sparkle.y, sparklePaint)
+        }
+    }
+
+    private fun drawChaseEffect(canvas: Canvas, paths: List<Path>) {
+        edgePaint.alpha = 48
+        edgePaint.maskFilter = null
+        drawPaths(canvas, paths, edgePaint)
+
+        paths.forEach { path ->
+            val measure = PathMeasure(path, false)
+            val length = measure.length
+            if (length <= 0f) return@forEach
+            val trail = length * 0.18f
+            repeat(3) { i ->
+                val center = ((effectProgress + i / 3f) % 1f) * length
+                val start = (center - trail).coerceAtLeast(0f)
+                val end = (center + trail).coerceAtMost(length)
+                val segment = Path()
+                measure.getSegment(start, end, segment, true)
+                val p = Paint(edgePaint).apply {
+                    alpha = 255
+                    strokeWidth = baseStrokeWidth() * 1.15f
+                }
+                canvas.drawPath(segment, p)
+            }
+        }
+    }
+
+    private fun drawCometEffect(canvas: Canvas, paths: List<Path>) {
+        edgePaint.alpha = 30
+        edgePaint.maskFilter = null
+        drawPaths(canvas, paths, edgePaint)
+
+        paths.forEach { path ->
+            val measure = PathMeasure(path, false)
+            val length = measure.length
+            if (length <= 0f) return@forEach
+            val head = effectProgress * length
+            val trail = length * 0.30f
+            val start = (head - trail).coerceAtLeast(0f)
+            val segment = Path()
+            measure.getSegment(start, head, segment, true)
+            val p = Paint(edgePaint).apply {
+                alpha = 255
+                strokeWidth = baseStrokeWidth() * 1.55f
+            }
+            canvas.drawPath(segment, p)
+        }
+    }
+
+    /**
+     * High quality Aurora renderer. It uses densely sampled flowing geometry plus four luminous
+     * layers. "single" follows the selected edge-light color; "multi" uses a smooth aurora palette.
+     */
+    private fun drawAuroraEffect(canvas: Canvas, paths: List<Path>) {
+        val baseWidth = baseStrokeWidth()
+        val multi = auroraColorMode == AURORA_MULTI
+
+        paths.forEachIndexed { index, path ->
+            val primaryWave = buildWavyPath(
+                path,
+                amplitude = baseWidth * 1.15f,
+                phase = effectProgress + index * 0.17f,
+                highQuality = true,
+            )
+            val secondaryWave = buildWavyPath(
+                path,
+                amplitude = baseWidth * 0.55f,
+                phase = effectProgress * 0.72f + 0.33f + index * 0.11f,
+                highQuality = true,
+            )
+
+            drawAuroraLayers(canvas, primaryWave, baseWidth, multi, 1f)
+            drawAuroraLayers(canvas, secondaryWave, baseWidth * 0.72f, multi, 0.68f)
+        }
+    }
+
+    private fun drawAuroraLayers(
+        canvas: Canvas,
+        path: Path,
+        baseWidth: Float,
+        multi: Boolean,
+        alphaScale: Float,
+    ) {
+        val shader = if (multi) auroraShader() else null
+        val color = effectiveGlowBaseColor()
+
+        val widths = floatArrayOf(6.2f, 4.1f, 2.35f, 1.0f)
+        val alphas = intArrayOf(22, 42, 92, 238)
+        val blur = floatArrayOf(2.8f, 1.8f, 0.8f, 0f)
+
+        for (i in widths.indices) {
+            val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+                strokeWidth = baseWidth * widths[i]
+                alpha = (alphas[i] * alphaScale).toInt().coerceIn(0, 255)
+                if (shader != null) {
+                    this.shader = shader
+                } else {
+                    this.color = color
+                }
+                if (blur[i] > 0f) {
+                    maskFilter = BlurMaskFilter(
+                        (baseWidth * blur[i]).coerceAtLeast(1f),
+                        BlurMaskFilter.Blur.NORMAL,
+                    )
+                }
+            }
+            canvas.drawPath(path, p)
+        }
+    }
+
+    private fun buildWavyPath(
+        source: Path,
+        amplitude: Float,
+        phase: Float,
+        highQuality: Boolean = false,
+    ): Path {
+        val measure = PathMeasure(source, false)
+        val length = measure.length
+        if (length <= 0f) return Path(source)
+
+        val density = resources.displayMetrics.density.coerceAtLeast(1f)
+        val samples = if (highQuality) {
+            max(160, (length / (density * 1.75f)).toInt()).coerceAtMost(480)
+        } else {
+            max(48, (length / (density * 5f)).toInt()).coerceAtMost(180)
+        }
+        val pos = FloatArray(2)
+        val tan = FloatArray(2)
+        val out = Path()
+
+        for (i in 0..samples) {
+            val t = i / samples.toFloat()
+            measure.getPosTan(length * t, pos, tan)
+            val harmonic =
+                sin((t * 3.0 + phase * 2.0) * PI).toFloat() * 0.72f +
+                sin((t * 7.0 - phase * 1.35) * PI).toFloat() * 0.28f
+            val offset = harmonic * amplitude
+            val x = pos[0] - tan[1] * offset
+            val y = pos[1] + tan[0] * offset
+            if (i == 0) out.moveTo(x, y) else out.lineTo(x, y)
+        }
+        return out
+    }
+
+    private fun randomPointOnPaths(paths: List<Path>): Pair<Float, Float>? {
+        val measured = paths.map { it to PathMeasure(it, false) }
+            .filter { it.second.length > 0f }
+        if (measured.isEmpty()) return null
+        val total = measured.sumOf { it.second.length.toDouble() }.toFloat()
+        var target = Random.nextFloat() * total
+        for ((_, measure) in measured) {
+            if (target <= measure.length) {
+                val pos = FloatArray(2)
+                measure.getPosTan(target, pos, null)
+                return pos[0] to pos[1]
+            }
+            target -= measure.length
+        }
+        return null
+    }
+
+    private fun drawGlow(canvas: Canvas) {
+        if (userIntensity <= 0f || userSpread <= 0f) return
+        val base = effectiveGlowBaseColor() and 0x00FFFFFF
+        val alpha = (alpha.coerceIn(0f, 1f) * userIntensity).coerceIn(0f, 1f)
+        if (alpha <= 0f) return
+
+        val sideSpread = (width * userSpread).coerceAtMost(width * 0.5f)
+        val verticalSpread = (height * userSpread).coerceAtMost(height * 0.35f)
+        val colors = intArrayOf(
+            colorWithAlpha(base, alpha),
+            colorWithAlpha(base, alpha * 0.62f),
+            colorWithAlpha(base, alpha * 0.28f),
+            colorWithAlpha(base, alpha * 0.09f),
+            colorWithAlpha(base, 0f),
+        )
+        val stops = floatArrayOf(0f, 0.12f, 0.34f, 0.68f, 1f)
+
+        if (showSides && sideSpread > 0f) {
+            glowPaint.shader = LinearGradient(
+                0f, 0f, sideSpread, 0f, colors, stops, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(0f, 0f, sideSpread, height.toFloat(), glowPaint)
+
+            glowPaint.shader = LinearGradient(
+                width.toFloat(), 0f, width - sideSpread, 0f,
+                colors, stops, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(width - sideSpread, 0f, width.toFloat(), height.toFloat(), glowPaint)
+        }
+
+        if (showTop && verticalSpread > 0f) {
+            glowPaint.shader = LinearGradient(
+                0f, 0f, 0f, verticalSpread, colors, stops, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(0f, 0f, width.toFloat(), verticalSpread, glowPaint)
+        }
+
+        if (showBottom && verticalSpread > 0f) {
+            glowPaint.shader = LinearGradient(
+                0f, height.toFloat(), 0f, height - verticalSpread,
+                colors, stops, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(
+                0f, height - verticalSpread, width.toFloat(), height.toFloat(), glowPaint
+            )
+        }
+
+        glowPaint.shader = null
+    }
+
+    private fun colorWithAlpha(baseColor: Int, alphaFloat: Float): Int {
+        val a = (alphaFloat * 255f).toInt().coerceIn(0, 255)
+        return (baseColor and 0x00FFFFFF) or (a shl 24)
     }
 
     private fun resolveGlowBase(color: Int): Int {
@@ -167,13 +604,62 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         return if (opaque == Color.BLACK) Color.WHITE else opaque
     }
 
+    private fun rainbowGlowColor(): Int {
+        val index = ((rainbowRotation / 360f) * (RAINBOW.size - 1)).toInt()
+            .coerceIn(0, RAINBOW.size - 2)
+        return RAINBOW[index]
+    }
+
+    private fun effectiveGlowBaseColor(): Int =
+        if (useRainbowGradient) rainbowGlowColor() else glowBaseColor
+
+    private fun auroraShader(): Shader {
+        val matrix = Matrix().apply {
+            postRotate(effectProgress * 360f, width / 2f, height / 2f)
+        }
+        return SweepGradient(width / 2f, height / 2f, AURORA_COLORS, null).apply {
+            setLocalMatrix(matrix)
+        }
+    }
+
+    private fun updateRainbowGradient() {
+        if (width == 0 || height == 0) {
+            post { applyRainbowGradient() }
+        } else {
+            applyRainbowGradient()
+        }
+    }
+
+    private fun applyRainbowGradient() {
+        if (width <= 0 || height <= 0) return
+        edgePaint.shader =
+            if (isFrameStyle(edgeStyle) || showTop || showBottom) {
+                val matrix = Matrix().apply {
+                    postRotate(rainbowRotation, width / 2f, height / 2f)
+                }
+                SweepGradient(width / 2f, height / 2f, RAINBOW, null).apply {
+                    setLocalMatrix(matrix)
+                }
+            } else {
+                val offset = (rainbowRotation / 360f) * height
+                LinearGradient(
+                    0f,
+                    -offset,
+                    0f,
+                    height.toFloat() - offset,
+                    RAINBOW,
+                    null,
+                    Shader.TileMode.REPEAT,
+                )
+            }
+    }
+
     private fun startPulse() {
         visible = true
         alpha = 0f
 
-        val totalSegments = maxOf(userPulseCount, MIN_SEGMENTS)
+        val totalSegments = max(userPulseCount, minSegments)
         val active = BooleanArray(totalSegments)
-
         for (i in 0 until userPulseCount) {
             val idx = (((i + 0.5f) * totalSegments) / userPulseCount).toInt()
                 .coerceIn(0, totalSegments - 1)
@@ -186,15 +672,14 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
                 val progress = animator.animatedValue as Float
                 val segmentIndex = progress.toInt().coerceIn(0, totalSegments - 1)
                 val fraction = progress - segmentIndex
-
-                if (active[segmentIndex]) {
-                    alpha = when {
+                alpha = if (active[segmentIndex]) {
+                    when {
                         fraction < fadeFraction -> fraction / fadeFraction
                         fraction > 1f - fadeFraction -> (1f - fraction) / fadeFraction
                         else -> 1f
                     }
                 } else {
-                    alpha = 0f
+                    0f
                 }
             }
             addListener(object : AnimatorListenerAdapter() {
@@ -218,507 +703,6 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         pulseAnimator = null
     }
 
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        stopRainbowAnimation()
-        stopEffectAnimation()
-        stopPulse()
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-
-        when (edgeStyle) {
-            STYLE_ROUNDED -> {
-                drawRoundedEdges(canvas)
-                drawGlowRounded(canvas)
-            }
-            else -> {
-                drawDefaultEdges(canvas)
-                drawGlowDefault(canvas)
-            }
-        }
-    }
-
-    private fun buildGlowAlpha(baseAlpha: Float): FloatArray {
-        val a = (baseAlpha * userIntensity).coerceIn(0f, 1f)
-        return floatArrayOf(a, a * 0.65f, a * 0.28f, a * 0.08f, 0f)
-    }
-
-    private fun spreadStops(): FloatArray {
-        val s = userSpread.coerceIn(0.05f, 1f)
-        return floatArrayOf(0f, s * 0.10f, s * 0.30f, s * 0.60f, s)
-    }
-
-    private fun colorWithAlpha(baseColor: Int, alphaFloat: Float): Int {
-        val a = (alphaFloat * 255f).toInt().coerceIn(0, 255)
-        return (baseColor and 0x00FFFFFF) or (a shl 24)
-    }
-
-    private fun currentGlowAlpha(): Float = alpha.coerceIn(0f, 1f)
-
-    private fun rainbowGlowColor(): Int {
-        val index = ((rainbowRotation / 360f) * (RAINBOW.size - 1)).toInt()
-            .coerceIn(0, RAINBOW.size - 2)
-        return RAINBOW[index]
-    }
-
-    private fun effectiveGlowBaseColor(): Int =
-        if (useRainbowGradient) rainbowGlowColor() else glowBaseColor
-
-    private fun drawGlowDefault(canvas: Canvas) {
-        if (userIntensity == 0f) return
-        val base = effectiveGlowBaseColor() and 0x00FFFFFF
-        val alphas = buildGlowAlpha(currentGlowAlpha())
-        val stops = spreadStops()
-        val spreadPx = width * userSpread
-
-        val leftColors  = IntArray(5) { colorWithAlpha(base, alphas[it]) }
-        val leftGradient = LinearGradient(
-            0f, 0f, spreadPx, 0f,
-            leftColors, stops, Shader.TileMode.CLAMP
-        )
-        glowPaint.shader = leftGradient
-        canvas.drawRect(0f, 0f, spreadPx, height.toFloat(), glowPaint)
-
-        val rightColors = IntArray(5) { colorWithAlpha(base, alphas[4 - it]) }
-        val rightGradient = LinearGradient(
-            width - spreadPx, 0f, width.toFloat(), 0f,
-            rightColors, stops.reversedArray().map { 1f - it }.toFloatArray(),
-            Shader.TileMode.CLAMP
-        )
-        glowPaint.shader = rightGradient
-        canvas.drawRect(width - spreadPx, 0f, width.toFloat(), height.toFloat(), glowPaint)
-    }
-
-    private fun drawGlowRounded(canvas: Canvas) {
-        if (userIntensity == 0f) return
-        val base = effectiveGlowBaseColor() and 0x00FFFFFF
-        val alphas = buildGlowAlpha(currentGlowAlpha())
-        val stops = spreadStops()
-        val spreadPxH = width  * userSpread
-        val spreadPxV = height * userSpread
-
-        val buildColors = { a: FloatArray -> IntArray(5) { colorWithAlpha(base, a[it]) } }
-        val revStops = FloatArray(5) { 1f - stops[4 - it] }
-
-        glowPaint.shader = LinearGradient(0f, 0f, spreadPxH, 0f,
-            buildColors(alphas), stops, Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, 0f, spreadPxH, height.toFloat(), glowPaint)
-
-        glowPaint.shader = LinearGradient(width - spreadPxH, 0f, width.toFloat(), 0f,
-            buildColors(FloatArray(5) { alphas[4 - it] }), revStops, Shader.TileMode.CLAMP)
-        canvas.drawRect(width - spreadPxH, 0f, width.toFloat(), height.toFloat(), glowPaint)
-
-        glowPaint.shader = LinearGradient(0f, 0f, 0f, spreadPxV,
-            buildColors(alphas), stops, Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, 0f, width.toFloat(), spreadPxV, glowPaint)
-
-        glowPaint.shader = LinearGradient(0f, height - spreadPxV, 0f, height.toFloat(),
-            buildColors(FloatArray(5) { alphas[4 - it] }), revStops, Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, height - spreadPxV, width.toFloat(), height.toFloat(), glowPaint)
-    }
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        if (useRainbowGradient) {
-            updateRainbowGradient()
-            invalidate()
-        }
-    }
-
-    private fun drawDefaultEdges(canvas: Canvas) {
-        val halfStroke = edgePaint.strokeWidth / 2
-        edgePaint.strokeCap = Paint.Cap.BUTT
-
-        when (animationEffect) {
-            EFFECT_BREATHING -> applyBreathingEffect()
-            EFFECT_WAVE -> drawWaveEffect(canvas)
-            EFFECT_SPARKLE -> drawSparkleEffect(canvas)
-            EFFECT_CHASE -> drawChaseEffect(canvas)
-            EFFECT_COMET -> drawCometEffect(canvas)
-            else -> {
-                edgePaint.alpha = 255
-                edgePaint.maskFilter = null
-                canvas.drawLine(halfStroke, 0f, halfStroke, height.toFloat(), edgePaint)
-                canvas.drawLine(width - halfStroke, 0f, width - halfStroke, height.toFloat(), edgePaint)
-            }
-        }
-    }
-
-    private fun drawRoundedEdges(canvas: Canvas) {
-        val halfStroke = edgePaint.strokeWidth / 2
-        edgePaint.strokeCap = Paint.Cap.ROUND
-
-        roundedRect.set(
-            halfStroke,
-            halfStroke,
-            width.toFloat() - halfStroke,
-            height.toFloat() - halfStroke
-        )
-
-        roundedPath.reset()
-        roundedPath.addRoundRect(
-            roundedRect,
-            cornerRadius,
-            cornerRadius,
-            Path.Direction.CW
-        )
-
-        when (animationEffect) {
-            EFFECT_BREATHING -> {
-                applyBreathingEffect()
-                canvas.drawPath(roundedPath, edgePaint)
-            }
-            EFFECT_WAVE -> drawWaveEffectRounded(canvas)
-            EFFECT_SPARKLE -> drawSparkleEffectRounded(canvas)
-            EFFECT_CHASE -> drawChaseEffectRounded(canvas)
-            EFFECT_COMET -> drawCometEffectRounded(canvas)
-            else -> {
-                edgePaint.alpha = 255
-                edgePaint.maskFilter = null
-                canvas.drawPath(roundedPath, edgePaint)
-            }
-        }
-    }
-
-    private fun applyBreathingEffect() {
-        val cycle = sin(effectProgress * 2 * PI).toFloat()
-        val normalizedCycle = (cycle + 1f) / 2f
-
-        edgePaint.alpha = (155 + (normalizedCycle * 100)).toInt().coerceIn(0, 255)
-        edgePaint.strokeWidth = (userStrokeWidth * resources.displayMetrics.density) * (0.7f + normalizedCycle * 0.6f)
-        edgePaint.maskFilter = null
-    }
-
-    private fun drawWaveEffect(canvas: Canvas) {
-        val halfStroke = edgePaint.strokeWidth / 2
-        val segments = 50
-        val waveHeight = width * 0.05f
-
-        edgePaint.alpha = 255
-        edgePaint.maskFilter = null
-
-        for (i in 0 until segments) {
-            val y1 = (i.toFloat() / segments) * height
-            val y2 = ((i + 1).toFloat() / segments) * height
-            val offset1 = sin((effectProgress * 2 * PI + (i.toFloat() / segments) * 2 * PI)).toFloat() * waveHeight
-            val offset2 = sin((effectProgress * 2 * PI + ((i + 1).toFloat() / segments) * 2 * PI)).toFloat() * waveHeight
-
-            canvas.drawLine(halfStroke + offset1, y1, halfStroke + offset2, y2, edgePaint)
-        }
-
-        for (i in 0 until segments) {
-            val y1 = (i.toFloat() / segments) * height
-            val y2 = ((i + 1).toFloat() / segments) * height
-            val offset1 = sin((effectProgress * 2 * PI + (i.toFloat() / segments) * 2 * PI)).toFloat() * waveHeight
-            val offset2 = sin((effectProgress * 2 * PI + ((i + 1).toFloat() / segments) * 2 * PI)).toFloat() * waveHeight
-
-            canvas.drawLine(width - halfStroke + offset1, y1, width - halfStroke + offset2, y2, edgePaint)
-        }
-    }
-
-    private fun drawWaveEffectRounded(canvas: Canvas) {
-        edgePaint.alpha = 255
-        edgePaint.maskFilter = null
-
-        val measure = PathMeasure(roundedPath, false)
-        pathLength = measure.length
-        val segments = 100
-        val waveAmplitude = edgePaint.strokeWidth * 0.5f
-
-        val wavePath = Path()
-        for (i in 0..segments) {
-            val distance = (i.toFloat() / segments) * pathLength
-            val pos = FloatArray(2)
-            val tan = FloatArray(2)
-            measure.getPosTan(distance, pos, tan)
-
-            val waveOffset = sin((effectProgress * 2 * PI + (i.toFloat() / segments) * 4 * PI)).toFloat() * waveAmplitude
-            val normalX = -tan[1]
-            val normalY = tan[0]
-
-            val x = pos[0] + normalX * waveOffset
-            val y = pos[1] + normalY * waveOffset
-
-            if (i == 0) wavePath.moveTo(x, y) else wavePath.lineTo(x, y)
-        }
-
-        canvas.drawPath(wavePath, edgePaint)
-    }
-
-    private fun drawSparkleEffect(canvas: Canvas) {
-        val halfStroke = edgePaint.strokeWidth / 2
-        edgePaint.alpha = 100
-        edgePaint.maskFilter = null
-
-        canvas.drawLine(halfStroke, 0f, halfStroke, height.toFloat(), edgePaint)
-        canvas.drawLine(width - halfStroke, 0f, width - halfStroke, height.toFloat(), edgePaint)
-
-        sparkles.removeAll { it.lifetime <= 0f }
-
-        if (sparkles.size < 15 && Random.nextFloat() < 0.3f) {
-            val isLeft = Random.nextBoolean()
-            sparkles.add(
-                Sparkle(
-                    x = if (isLeft) halfStroke else width - halfStroke,
-                    y = Random.nextFloat() * height,
-                    lifetime = 1f,
-                    maxSize = edgePaint.strokeWidth * (2f + Random.nextFloat() * 2f)
-                )
-            )
-        }
-
-        val sparklePaint = Paint(edgePaint).apply { strokeCap = Paint.Cap.ROUND }
-        sparkles.forEach { sparkle ->
-            sparkle.lifetime -= 0.03f
-            val alpha = (sparkle.lifetime * 255).toInt().coerceIn(0, 255)
-            val size = sparkle.maxSize * sin(sparkle.lifetime * PI).toFloat()
-
-            sparklePaint.alpha = alpha
-            sparklePaint.strokeWidth = size
-            canvas.drawPoint(sparkle.x, sparkle.y, sparklePaint)
-        }
-    }
-
-    private fun drawSparkleEffectRounded(canvas: Canvas) {
-        edgePaint.alpha = 100
-        edgePaint.maskFilter = null
-        canvas.drawPath(roundedPath, edgePaint)
-
-        val measure = PathMeasure(roundedPath, false)
-        pathLength = measure.length
-
-        sparkles.removeAll { it.lifetime <= 0f }
-
-        if (sparkles.size < 20 && Random.nextFloat() < 0.3f) {
-            val distance = Random.nextFloat() * pathLength
-            val pos = FloatArray(2)
-            measure.getPosTan(distance, pos, null)
-
-            sparkles.add(
-                Sparkle(
-                    x = pos[0],
-                    y = pos[1],
-                    lifetime = 1f,
-                    maxSize = edgePaint.strokeWidth * (2f + Random.nextFloat() * 2f)
-                )
-            )
-        }
-
-        val sparklePaint = Paint(edgePaint).apply { strokeCap = Paint.Cap.ROUND }
-        sparkles.forEach { sparkle ->
-            sparkle.lifetime -= 0.03f
-            val alpha = (sparkle.lifetime * 255).toInt().coerceIn(0, 255)
-            val size = sparkle.maxSize * sin(sparkle.lifetime * PI).toFloat()
-
-            sparklePaint.alpha = alpha
-            sparklePaint.strokeWidth = size
-            canvas.drawPoint(sparkle.x, sparkle.y, sparklePaint)
-        }
-    }
-
-    private fun drawChaseEffect(canvas: Canvas) {
-        val halfStroke = edgePaint.strokeWidth / 2
-        val segmentLength = height * 0.15f
-        val numChasers = 3
-
-        edgePaint.alpha = 50
-        edgePaint.maskFilter = null
-        canvas.drawLine(halfStroke, 0f, halfStroke, height.toFloat(), edgePaint)
-        canvas.drawLine(width - halfStroke, 0f, width - halfStroke, height.toFloat(), edgePaint)
-
-        for (i in 0 until numChasers) {
-            val offset = (effectProgress + i.toFloat() / numChasers) % 1f
-            val centerY = offset * height
-
-            val gradient = LinearGradient(
-                0f, centerY - segmentLength,
-                0f, centerY + segmentLength,
-                intArrayOf(
-                    0x00000000 or (edgePaint.color and 0x00FFFFFF),
-                    edgePaint.color,
-                    0x00000000 or (edgePaint.color and 0x00FFFFFF)
-                ),
-                floatArrayOf(0f, 0.5f, 1f),
-                Shader.TileMode.CLAMP
-            )
-
-            val chaserPaint = Paint(edgePaint).apply {
-                shader = gradient
-                alpha = 255
-            }
-
-            canvas.drawLine(
-                halfStroke,
-                (centerY - segmentLength).coerceAtLeast(0f),
-                halfStroke,
-                (centerY + segmentLength).coerceAtMost(height.toFloat()),
-                chaserPaint
-            )
-            canvas.drawLine(
-                width - halfStroke,
-                (centerY - segmentLength).coerceAtLeast(0f),
-                width - halfStroke,
-                (centerY + segmentLength).coerceAtMost(height.toFloat()),
-                chaserPaint
-            )
-        }
-    }
-
-    private fun drawChaseEffectRounded(canvas: Canvas) {
-        edgePaint.alpha = 50
-        edgePaint.maskFilter = null
-        canvas.drawPath(roundedPath, edgePaint)
-
-        val measure = PathMeasure(roundedPath, false)
-        pathLength = measure.length
-        val segmentLength = pathLength * 0.15f
-        val numChasers = 3
-
-        for (i in 0 until numChasers) {
-            val offset = (effectProgress + i.toFloat() / numChasers) % 1f
-            val centerDistance = offset * pathLength
-
-            val chaserPath = Path()
-            val startDist = (centerDistance - segmentLength).coerceAtLeast(0f)
-            val endDist = (centerDistance + segmentLength).coerceAtMost(pathLength)
-
-            measure.getSegment(startDist, endDist, chaserPath, true)
-
-            val chaserPaint = Paint(edgePaint).apply { alpha = 255 }
-            canvas.drawPath(chaserPath, chaserPaint)
-        }
-    }
-
-    private fun drawCometEffect(canvas: Canvas) {
-        val halfStroke = edgePaint.strokeWidth / 2
-        val tailLength = height * 0.25f
-
-        edgePaint.alpha = 30
-        edgePaint.maskFilter = null
-        canvas.drawLine(halfStroke, 0f, halfStroke, height.toFloat(), edgePaint)
-        canvas.drawLine(width - halfStroke, 0f, width - halfStroke, height.toFloat(), edgePaint)
-
-        val cometY = effectProgress * height
-
-        val gradient = LinearGradient(
-            0f,
-            (cometY - tailLength).coerceAtLeast(0f),
-            0f,
-            cometY,
-            intArrayOf(0x00000000 or (edgePaint.color and 0x00FFFFFF), edgePaint.color),
-            null,
-            Shader.TileMode.CLAMP
-        )
-
-        val cometPaint = Paint(edgePaint).apply {
-            shader = gradient
-            alpha = 255
-            strokeWidth = edgePaint.strokeWidth * 1.5f
-        }
-
-        canvas.drawLine(
-            halfStroke,
-            (cometY - tailLength).coerceAtLeast(0f),
-            halfStroke,
-            cometY,
-            cometPaint
-        )
-        canvas.drawLine(
-            width - halfStroke,
-            (cometY - tailLength).coerceAtLeast(0f),
-            width - halfStroke,
-            cometY,
-            cometPaint
-        )
-    }
-
-    private fun drawCometEffectRounded(canvas: Canvas) {
-        edgePaint.alpha = 30
-        edgePaint.maskFilter = null
-        canvas.drawPath(roundedPath, edgePaint)
-
-        val measure = PathMeasure(roundedPath, false)
-        pathLength = measure.length
-        val tailLength = pathLength * 0.2f
-        val cometDistance = effectProgress * pathLength
-
-        val cometPath = Path()
-        val startDist = (cometDistance - tailLength).coerceAtLeast(0f)
-        measure.getSegment(startDist, cometDistance, cometPath, true)
-
-        val cometPaint = Paint(edgePaint).apply {
-            alpha = 255
-            strokeWidth = edgePaint.strokeWidth * 1.5f
-        }
-        canvas.drawPath(cometPath, cometPaint)
-    }
-
-    private fun updateRainbowGradient() {
-        if (width == 0 || height == 0) {
-            post { _updateRainbowGradient() }
-        } else {
-            _updateRainbowGradient()
-        }
-    }
-
-    private fun _updateRainbowGradient() {
-        edgePaint.shader = when (edgeStyle) {
-            STYLE_ROUNDED -> {
-                val matrix = Matrix()
-                matrix.postRotate(rainbowRotation, width / 2f, height / 2f)
-                SweepGradient(width / 2f, height / 2f, RAINBOW, null).also {
-                    it.setLocalMatrix(matrix)
-                }
-            }
-            else -> {
-                val offset = (rainbowRotation / 360f) * height
-                LinearGradient(
-                    0f, -offset, 0f, height.toFloat() - offset,
-                    RAINBOW, null, Shader.TileMode.REPEAT
-                )
-            }
-        }
-    }
-
-    private fun startRainbowAnimation() {
-        if (!useRainbowGradient || edgePaint.shader == null) return
-        if (animationEffect in MOVING_EFFECT) return
-        if (rainbowAnimator?.isRunning == true) return
-
-        rainbowAnimator = ValueAnimator.ofFloat(0f, 360f).apply {
-            duration = totalPulseDuration
-            repeatCount = ValueAnimator.INFINITE
-            repeatMode = ValueAnimator.RESTART
-            interpolator = android.view.animation.LinearInterpolator()
-            addUpdateListener { animator ->
-                rainbowRotation = animator.animatedValue as Float
-                glowBaseColor = rainbowGlowColor()
-                _updateRainbowGradient()
-                invalidate()
-            }
-            addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) {
-                    rainbowAnimator = null
-                    rainbowRotation = 0f
-                }
-
-                override fun onAnimationCancel(animation: Animator) {
-                    rainbowAnimator = null
-                    rainbowRotation = 0f
-                }
-            })
-            start()
-        }
-    }
-
-    private fun stopRainbowAnimation() {
-        rainbowAnimator?.cancel()
-        rainbowAnimator = null
-        rainbowRotation = 0f
-    }
-
     private fun startEffectAnimation() {
         if (animationEffect == EFFECT_NONE) return
         if (effectAnimator?.isRunning == true) return
@@ -729,6 +713,7 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
             EFFECT_SPARKLE -> 100L
             EFFECT_CHASE -> 2500L
             EFFECT_COMET -> 2000L
+            EFFECT_AURORA -> 4200L
             else -> 2000L
         }
 
@@ -736,7 +721,7 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
             this.duration = duration
             repeatCount = ValueAnimator.INFINITE
             repeatMode = ValueAnimator.RESTART
-            interpolator = android.view.animation.LinearInterpolator()
+            interpolator = LinearInterpolator()
             addUpdateListener { animator ->
                 effectProgress = animator.animatedValue as Float
                 invalidate()
@@ -765,28 +750,101 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         sparkles.clear()
     }
 
+    private fun startRainbowAnimation() {
+        if (!useRainbowGradient || edgePaint.shader == null) return
+        if (animationEffect in MOVING_EFFECTS) return
+        if (rainbowAnimator?.isRunning == true) return
+
+        rainbowAnimator = ValueAnimator.ofFloat(0f, 360f).apply {
+            duration = totalPulseDuration
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            interpolator = LinearInterpolator()
+            addUpdateListener { animator ->
+                rainbowRotation = animator.animatedValue as Float
+                glowBaseColor = rainbowGlowColor()
+                applyRainbowGradient()
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    rainbowAnimator = null
+                    rainbowRotation = 0f
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    rainbowAnimator = null
+                    rainbowRotation = 0f
+                }
+            })
+            start()
+        }
+    }
+
+    private fun stopRainbowAnimation() {
+        rainbowAnimator?.cancel()
+        rainbowAnimator = null
+        rainbowRotation = 0f
+    }
+
     private data class Sparkle(
-        var x: Float,
-        var y: Float,
+        val x: Float,
+        val y: Float,
         var lifetime: Float,
-        val maxSize: Float
+        val maxSize: Float,
     )
 
     companion object {
         const val STYLE_DEFAULT = "default"
         const val STYLE_ROUNDED = "rounded"
         const val COLOR_RAINBOW = -1
+
         const val EFFECT_NONE = "none"
         const val EFFECT_BREATHING = "breathing"
         const val EFFECT_WAVE = "wave"
         const val EFFECT_SPARKLE = "sparkle"
         const val EFFECT_CHASE = "chase"
         const val EFFECT_COMET = "comet"
-        private val MOVING_EFFECT = arrayOf(EFFECT_WAVE, EFFECT_SPARKLE, EFFECT_CHASE, EFFECT_COMET)
-        private val RAINBOW = intArrayOf(
-            0xFFFF0000.toInt(), 0xFFFF7F00.toInt(), 0xFFFFFF00.toInt(),
-            0xFF00FF00.toInt(), 0xFF0000FF.toInt(), 0xFF4B0082.toInt(),
-            0xFF9400D3.toInt(), 0xFFFF0000.toInt()
+        const val EFFECT_AURORA = "aurora"
+
+        const val AURORA_SINGLE = "single"
+        const val AURORA_MULTI = "multi"
+
+        private val MOVING_EFFECTS = arrayOf(
+            EFFECT_WAVE,
+            EFFECT_SPARKLE,
+            EFFECT_CHASE,
+            EFFECT_COMET,
+            EFFECT_AURORA,
         )
+
+        private val RAINBOW = intArrayOf(
+            0xFFFF0000.toInt(),
+            0xFFFF7F00.toInt(),
+            0xFFFFFF00.toInt(),
+            0xFF00FF00.toInt(),
+            0xFF00C8FF.toInt(),
+            0xFF4050FF.toInt(),
+            0xFF9B32FF.toInt(),
+            0xFFFF2DAA.toInt(),
+            0xFFFF0000.toInt(),
+        )
+
+        // Aurora palette intentionally repeats the first color for seamless animated sweep.
+        private val AURORA_COLORS = intArrayOf(
+            0xFF2DFFDB.toInt(),
+            0xFF22B8FF.toInt(),
+            0xFF635BFF.toInt(),
+            0xFFB64CFF.toInt(),
+            0xFFFF4FD8.toInt(),
+            0xFF6DFF9A.toInt(),
+            0xFF2DFFDB.toInt(),
+        )
+
+        private fun isFrameStyle(style: String): Boolean {
+            val s = style.trim()
+            return s.equals("rounded", ignoreCase = true) ||
+                s.equals("frame", ignoreCase = true)
+        }
     }
 }
