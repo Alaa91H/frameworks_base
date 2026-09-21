@@ -112,7 +112,8 @@ constructor(
                 edgeLightView.showBottom = settings.showBottom
                 edgeLightView.auroraColorMode = settings.auroraColorMode
 
-                if (!shouldShowInCurrentDisplayState()) {
+                val hasEnabledRegion = settings.showTop || settings.showSides || settings.showBottom
+                if (!hasEnabledRegion || !shouldShowInCurrentDisplayState()) {
                     edgeLightView.pulseRunning = false
                     edgeLightView.visible = false
                 }
@@ -195,8 +196,10 @@ constructor(
     }
 
     override fun onDozingChanged(dozing: Boolean) {
-        if (!currentSettings.isEnabled) return
+        // Keep state current even while the feature is disabled; enabling it during an existing
+        // doze/AOD session must immediately use the correct display-state preference.
         isDozing = dozing
+        if (!currentSettings.isEnabled) return
         if (!isDozing) {
             edgeLightView.pulseRunning = false
             edgeLightView.visible = false
