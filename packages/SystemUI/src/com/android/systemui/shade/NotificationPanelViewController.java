@@ -4629,7 +4629,10 @@ public final class NotificationPanelViewController implements
             return;
         }
 
-        drawable.setVisible(true, true);
+        // Expansion updates can arrive every frame. Never request a drawable restart here:
+        // animated GIF/WEBP headers would otherwise jump back to their first frame while pulling
+        // the shade. start() below is enough when an animation is actually stopped.
+        drawable.setVisible(true, false);
         if (drawable instanceof Animatable anim && !anim.isRunning()) {
             anim.start();
         }
