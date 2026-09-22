@@ -63,17 +63,13 @@ class ModernStatusBarMobileView(context: Context, attrs: AttributeSet?) :
      * into the layout xml when the flag is rolled out fully
      */
     fun configureLayoutForNewStatusBarIcons() {
-        // Margins around the entire container
+        // Inter-item spacing belongs to StatusIconContainer. Keeping the mobile group's
+        // outer margins at zero prevents mobile from receiving an extra gap compared with
+        // alarm, hotspot, traffic, and other top-level status items.
         requireViewById<AlphaOptimizedLinearLayout>(R.id.mobile_group).apply {
             val lp = layoutParams as MarginLayoutParams
-            lp.marginStart =
-                context.resources.getDimensionPixelSize(
-                    R.dimen.status_bar_mobile_container_margin_start
-                )
-            lp.marginEnd =
-                context.resources.getDimensionPixelSize(
-                    R.dimen.status_bar_mobile_container_margin_end
-                )
+            lp.marginStart = 0
+            lp.marginEnd = 0
         }
 
         // triangle
