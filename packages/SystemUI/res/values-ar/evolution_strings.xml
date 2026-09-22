@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="flashlight_strength_title">شدة المصباح</string>
+    <string name="flashlight_strength_turn_off">إيقاف</string>
+    <string name="flashlight_strength_turn_on">تشغيل</string>
+    <string name="face_unlock_recognizing">جارٍ التعرّف على الوجه…</string>
+    <string name="status_bar_call_strength">قوة إشارة المكالمة</string>
+    <string name="status_bar_data_saver">توفير البيانات</string>
+    <string name="status_bar_nfc">NFC</string>
+    <string name="status_bar_roaming">مؤشر التجوال</string>
+    <string name="status_bar_hd_calling">مكالمات عالية الدقة (VoLTE/VoNR)</string>
+    <string name="status_bar_vowifi">الاتصال عبر Wi-Fi ‏(VoWiFi)</string>
+    <string name="data_disabled_icon_title">رمز تعطيل البيانات</string>
+    <string name="show_fourg_icon_title">رمز 4G</string>
+    <string name="wifi_standard_icon_title">معيار Wi-Fi</string>
+    <string name="mic_camera_privacy_indicator_title">مؤشر خصوصية الميكروفون والكاميرا</string>
+    <string name="location_privacy_indicator_title">مؤشر خصوصية الموقع</string>
+    <string name="projection_privacy_indicator_title">مؤشر خصوصية عرض الوسائط</string>
+    <plurals name="quick_settings_internet_hotspot_summary_num_devices">
+        <item quantity="zero">لا توجد أجهزة متصلة</item>
+        <item quantity="one">جهاز واحد متصل</item>
+        <item quantity="two">جهازان متصلان</item>
+        <item quantity="few">%d أجهزة متصلة</item>
+        <item quantity="many">%d جهازًا متصلًا</item>
+        <item quantity="other">%d جهاز متصل</item>
+    </plurals>
+    <string name="enable_fiveg">تفعيل 5G</string>
+    <string name="quick_settings_sound_label">الصوت</string>
+    <string name="quick_settings_sound_ring">رنين</string>
+    <string name="quick_settings_sound_vibrate">اهتزاز</string>
+    <string name="quick_settings_sound_mute">كتم</string>
+    <string name="qs_data_switch_label">تبديل شريحة البيانات</string>
+    <string name="quick_settings_volume_panel_label">لوحة مستوى الصوت</string>
+    <string name="quick_settings_locale_label">اللغة</string>
+    <string name="quick_settings_locale_more_locales_toast">اضبط عدة لغات أولًا</string>
+    <string name="quick_settings_preferred_network_label">الشبكة المفضلة</string>
+    <string name="quick_settings_preferred_network_unsupported">غير مدعوم</string>
+    <string name="refresh_rate_tile_label">معدل التحديث</string>
+    <string name="auto_mode_label">تلقائي</string>
+    <string name="quick_settings_compass_label">البوصلة</string>
+    <string name="quick_settings_compass_value"><xliff:g id="degrees">%1$.0f</xliff:g>\u00b0 <xliff:g id="direction">%2$s</xliff:g></string>
+    <string name="quick_settings_compass_init">جارٍ التهيئة\u2026</string>
+    <string name="quick_settings_compass_N">ش</string>
+    <string name="quick_settings_compass_NE">ش ق</string>
+    <string name="quick_settings_compass_E">ق</string>
+    <string name="quick_settings_compass_SE">ج ق</string>
+    <string name="quick_settings_compass_S">ج</string>
+    <string name="quick_settings_compass_SW">ج غ</string>
+    <string name="quick_settings_compass_W">غ</string>
+    <string name="quick_settings_compass_NW">ش غ</string>
+    <string name="screenshot_long_press">ضغط مطول - منطقة محددة</string>
+    <string name="quick_settings_cpuinfo_label">معلومات المعالج</string>
+    <string name="quick_settings_fpsinfo_label">معلومات FPS</string>
+    <string name="fps_text_placeholder">FPS: <xliff:g id="fps" example="90">%1$d</xliff:g></string>
+    <string name="quick_settings_autobrightness_label">السطوع التلقائي</string>
+    <string name="vpn_tethering_label">مشاركة اتصال VPN</string>
+    <string name="vpn_tethering_changed_off">تم إيقاف مشاركة اتصال VPN.</string>
+    <string name="vpn_tethering_changed_on">تم تشغيل مشاركة اتصال VPN.</string>
+    <string name="kilobitspersecond_short">kb/s</string>
+    <string name="megabitspersecond_short">Mb/s</string>
+    <string name="gigabitspersecond_short">Gb/s</string>
+    <string name="kilobytespersecond_short">kB/s</string>
+    <string name="megabytespersecond_short">MB/s</string>
+    <string name="gigabytespersecond_short">GB/s</string>
+    <string name="keyguard_indication_dash_charging_time"><xliff:g id="percentage">%2$s</xliff:g> • شحن Dash (يتبقى <xliff:g id="charging_time_left" example="4 ساعات ودقيقتان">%1$s</xliff:g> للاكتمال)</string>
+    <string name="keyguard_plugged_in_dash_charging"><xliff:g id="percentage">%s</xliff:g> • شحن Dash</string>
+    <string name="keyguard_indication_warp_charging_time"><xliff:g id="percentage">%2$s</xliff:g> • شحن Warp (يتبقى <xliff:g id="charging_time_left" example="4 ساعات ودقيقتان">%1$s</xliff:g> للاكتمال)</string>
+    <string name="keyguard_plugged_in_warp_charging"><xliff:g id="percentage">%s</xliff:g> • شحن Warp</string>
+    <string name="keyguard_indication_vooc_charging_time"><xliff:g id="percentage">%2$s</xliff:g> • شحن VOOC (يتبقى <xliff:g id="charging_time_left" example="4 ساعات ودقيقتان">%1$s</xliff:g> للاكتمال)</string>
+    <string name="keyguard_plugged_in_vooc_charging"><xliff:g id="percentage">%s</xliff:g> • شحن VOOC</string>
+    <string name="keyguard_indication_turbo_power_time"><xliff:g id="percentage">%2$s</xliff:g> • شحن Turbo (يتبقى <xliff:g id="charging_time_left" example="4 ساعات ودقيقتان">%1$s</xliff:g> للاكتمال)</string>
+    <string name="keyguard_plugged_in_turbo_charging"><xliff:g id="percentage">%s</xliff:g> • شحن Turbo</string>
+    <string name="global_action_restart_systemui">SystemUI</string>
+    <string name="quick_settings_smart_pixels_label">البكسلات الذكية</string>
+    <string name="quick_settings_smart_pixels_on">تشغيل</string>
+    <string name="quick_settings_smart_pixels_off">إيقاف</string>
+    <string name="smart_pixels_percent_label">نسبة البكسلات</string>
+    <string name="smart_pixels_percent_format"><xliff:g id="percent" example="25">%d</xliff:g>%%</string>
+    <string name="usb_mode_picker_title">اختيار وضع USB</string>
+    <string name="usb_mode_file_transfer">نقل الملفات</string>
+    <string name="usb_mode_tethering">مشاركة الإنترنت عبر USB</string>
+    <string name="usb_mode_midi">MIDI</string>
+    <string name="usb_mode_photo_transfer">نقل الصور والفيديو</string>
+    <string name="usb_mode_webcam">كاميرا ويب عبر USB</string>
+    <string name="usb_mode_charging_only">الشحن فقط</string>
+    <string name="usb_charging_status">الشحن عبر USB قيد التشغيل</string>
+    <string name="onthego_notif_ticker">تم تفعيل On-The-Go</string>
+    <string name="onthego_notif_title">On-The-Go نشط</string>
+    <string name="onthego_notif_stop">إيقاف</string>
+    <string name="onthego_notif_options">خيارات</string>
+    <string name="onthego_notif_error">تعذر تشغيل On-The-Go</string>
+    <string name="onthego_notif_restart">إعادة تشغيل On-The-Go</string>
+    <string name="onthego_notif_camera_changed">تم تغيير وضع الكاميرا</string>
+    <string name="onthego_service_toggle">إعادة تشغيل الخدمة تلقائيًا</string>
+    <string name="onthego_channel_name">رئيسي</string>
+    <string name="global_action_onthego">On-The-Go</string>
+    <string name="onthego_dialog_title">On-The-Go</string>
+    <string name="onthego_opacity_title">شفافية الكاميرا</string>
+    <string name="onthego_opacity_default">50%</string>
+    <string name="onthego_restart_title">إعادة التشغيل عند تبديل الكاميرا</string>
+    <string name="onthego_restart_summary">إعادة تشغيل المعاينة لفترة وجيزة عند تغيير الكاميرا</string>
+    <string name="onthego_front_camera_title">الكاميرا الأمامية</string>
+    <string name="onthego_front_camera_summary">استخدام الكاميرا الأمامية بدلًا من الخلفية</string>
+</resources>
