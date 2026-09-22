@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_info_install_time">تم التثبيت: %1$s</string>
+    <string name="app_info_update_time">آخر تحديث: %1$s</string>
+</resources>
