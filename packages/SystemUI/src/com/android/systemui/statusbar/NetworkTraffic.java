@@ -527,12 +527,12 @@ public class NetworkTraffic extends TextView implements TunerService.Tunable,
 
         if (visible != mVisible) {
             mVisible = visible;
-            setFixedWidth();
+            updateLayoutWidth();
             setVisibility(mVisible ? View.VISIBLE : View.GONE);
         }
     }
 
-    private void setFixedWidth() {
+    private void updateLayoutWidth() {
         /*
          * Let TextView measure exactly what is visible instead of reserving a hard-coded
          * 30dp/18dp box. With arrows enabled, the compound drawable's intrinsic width is
@@ -567,8 +567,8 @@ public class NetworkTraffic extends TextView implements TunerService.Tunable,
                     setLineSpacing(0f, 0.95f);
                     setLayoutDirection(View.LAYOUT_DIRECTION_LOCALE);
                     setTextDirection(View.TEXT_DIRECTION_LOCALE);
-                    // Keep the fixed-width traffic indicator visually balanced in both LTR
-                    // and RTL so unused width does not look like an extra gap next to one icon.
+                    // Keep the traffic indicator content visually balanced in both LTR
+                    // and RTL while its container follows the exact visible content width.
                     setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
                     setGravity(Gravity.CENTER);
                     setElegantTextHeight(false);
@@ -607,7 +607,7 @@ public class NetworkTraffic extends TextView implements TunerService.Tunable,
                 mHideArrows =
                         TunerService.parseIntegerSwitch(newValue, false);
                 setTrafficDrawable();
-                setFixedWidth();
+                updateLayoutWidth();
                 break;
             default:
                 break;
