@@ -19,6 +19,8 @@ import android.app.Notification
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Color
+import android.os.UserHandle
+import android.provider.Settings
 import android.view.Display
 import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
@@ -117,11 +119,22 @@ constructor(
 
     private fun currentDisplayMode(): DisplayMode {
         val state = context.display?.state ?: Display.STATE_ON
+        val alwaysOnEnabled = Settings.Secure.getIntForUser(
+            context.contentResolver,
+            Settings.Secure.DOZE_ALWAYS_ON,
+            0,
+            UserHandle.USER_CURRENT,
+        ) == 1
+
         return when {
+            state == Display.STATE_ON && !isDozing -> DisplayMode.SCREEN_ON
             state == Display.STATE_OFF -> DisplayMode.SCREEN_OFF
-            isDozing || state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND ->
+            alwaysOnEnabled &&
+                (isDozing || state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND) ->
                 DisplayMode.AOD
-            else -> DisplayMode.SCREEN_ON
+            // A temporary doze pulse while AOD is disabled still represents the
+            // screen-off notification path, not an always-on display session.
+            else -> DisplayMode.SCREEN_OFF
         }
     }
 
