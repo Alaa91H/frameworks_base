@@ -18,7 +18,6 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Shader;
 import android.graphics.SweepGradient;
 import android.hardware.biometrics.BiometricSourceType;
 import android.os.Handler;
