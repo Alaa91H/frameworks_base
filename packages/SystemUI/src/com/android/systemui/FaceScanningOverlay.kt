@@ -121,7 +121,11 @@ class FaceScanningOverlay(
             keyguardUpdateMonitor.isFaceAuthOrDetectionRunning || authController.isShowing || mDebug
         val faceAuthSucceeded = keyguardUpdateMonitor.isFaceAuthenticated
         val showScanningAnimationNow = scanningAnimationRequiredWhenCameraActive && isCameraActive
-        val useElectricFaceRingNow = isElectricFaceRingEnabled()
+        val useElectricFaceRingNow =
+            isElectricFaceRingEnabled() &&
+                keyguardUpdateMonitor.isKeyguardVisible &&
+                keyguardUpdateMonitor.isDeviceInteractive &&
+                keyguardUpdateMonitor.isFaceAuthOrDetectionRunning
         val electricRingSettingChanged = useElectricFaceRingNow != useElectricFaceRing
         useElectricFaceRing = useElectricFaceRingNow
         if (showScanningAnimationNow == showScanningAnim) {
