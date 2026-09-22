@@ -533,14 +533,19 @@ public class NetworkTraffic extends TextView implements TunerService.Tunable,
     }
 
     private void setFixedWidth() {
-        int requiredWidth = 0;
-        if (mVisible && !mHideArrows) {
-            requiredWidth = (int) (30 * getResources().getDisplayMetrics().density);
-        } else if (mVisible) {
-            requiredWidth = (int) (18 * getResources().getDisplayMetrics().density);
-        }
+        /*
+         * Let TextView measure exactly what is visible instead of reserving a hard-coded
+         * 30dp/18dp box. With arrows enabled, the compound drawable's intrinsic width is
+         * naturally included in wrap_content. With arrows hidden, the drawable is removed and
+         * only the rendered traffic text is measured. This keeps the status icon cluster compact
+         * for every value/unit and avoids stale empty space when toggling arrows.
+         */
+        final int requiredWidth = mVisible
+                ? ViewGroup.LayoutParams.WRAP_CONTENT
+                : 0;
         if (requiredWidth == mCurrentWidth) return;
-        ViewGroup.LayoutParams lp = getLayoutParams();
+
+        final ViewGroup.LayoutParams lp = getLayoutParams();
         if (lp != null) {
             mCurrentWidth = requiredWidth;
             lp.width = requiredWidth;
@@ -643,6 +648,9 @@ public class NetworkTraffic extends TextView implements TunerService.Tunable,
         if (mDrawable != drawable) {
             mDrawable = drawable;
             setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, mDrawable, null);
+            // The intrinsic drawable width changes the natural wrap_content width. Request a
+            // fresh measurement immediately so toggling arrows never leaves the old width behind.
+            requestLayout();
         }
     }
 
