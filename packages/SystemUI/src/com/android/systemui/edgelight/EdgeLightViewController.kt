@@ -205,14 +205,20 @@ constructor(
         val triggerState = currentTriggerState()
         pendingTriggerState = triggerState
 
-        if (isStateEnabled(triggerState)) {
+        // Do not consume the pulse animation while the panel is physically off. Keep the
+        // notification state pending and start it when doze/pulsing brings pixels back.
+        if (triggerState != TriggerState.SCREEN_OFF && isStateEnabled(triggerState)) {
             showEdgeLights()
         }
     }
 
     override fun onDozingChanged(dozing: Boolean) {
         isDozing = dozing
-        if (!isStateEnabled(currentTriggerState())) {
+        val pendingScreenOff = pendingTriggerState == TriggerState.SCREEN_OFF &&
+            System.currentTimeMillis() - lastNotificationTime <= pendingStateWindowMs
+        if (dozing && pendingScreenOff && currentSettings.screenOffEnabled) {
+            showEdgeLights()
+        } else if (!isStateEnabled(currentTriggerState())) {
             stopEdgeLight()
         }
     }
