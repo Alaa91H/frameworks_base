@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="accessibility_action_expand">توسيع</string>
+    <string name="accessibility_now_playing_container_recognition_result_content_description">تم التعرّف على الأغنية. %1$s، %2$s.</string>
+    <string name="accessibility_now_playing_container_song_searching_content_description">جارٍ التعرّف على الأغنية</string>
+    <string name="accessibility_now_playing_like_icon">إضافة إلى المفضلة</string>
+    <string name="accessibility_now_playing_play_icon">تشغيل في مشغّل الموسيقى الافتراضي</string>
+    <string name="accessibility_now_playing_unlike_icon">إزالة من المفضلة</string>
+    <string name="now_playing_label">قيد التشغيل الآن</string>
+    <string name="now_playing_track_and_artist_description">قيد التشغيل الآن: %1$s بواسطة %2$s</string>
+
+    <string name="global_action_restart_more">إعادة التشغيل\u2026</string>
+    <string name="global_action_restart_system">النظام</string>
+    <string name="global_action_restart_recovery">وضع الاسترداد</string>
+    <string name="global_action_restart_bootloader">محمّل الإقلاع</string>
+    <string name="global_action_restart_download">وضع التنزيل</string>
+    <string name="global_action_restart_fastboot">Fastbootd</string>
+    <string name="global_action_restart_progress">جارٍ إعادة التشغيل\u2026</string>
+    <string name="global_action_restart_recovery_progress">جارٍ إعادة التشغيل إلى وضع الاسترداد\u2026</string>
+    <string name="global_action_restart_bootloader_progress">جارٍ إعادة التشغيل إلى وضع محمّل الإقلاع\u2026</string>
+    <string name="global_action_restart_download_progress">جارٍ إعادة التشغيل إلى وضع التنزيل\u2026</string>
+    <string name="global_action_restart_fastboot_progress">جارٍ إعادة التشغيل إلى وضع fastbootd\u2026</string>
+    <string name="global_action_current_user">الحالي</string>
+    <string name="global_action_users">المستخدمون</string>
+
+    <string name="clock">الساعة</string>
+    <string name="accessibility_adaptive_brightness">السطوع التلقائي</string>
+    <string name="status_bar_icons_title">رموز شريط الحالة</string>
+    <string name="quick_settings_ambient_display_label">الشاشة المحيطة</string>
+    <string name="accessibility_quick_settings_ambient_display_off">الشاشة المحيطة متوقفة.</string>
+    <string name="accessibility_quick_settings_ambient_display_on">الشاشة المحيطة مفعّلة.</string>
+    <string name="quick_settings_aod_label">الشاشة الدائمة التشغيل</string>
+    <string name="quick_settings_aod_off_powersave_label">الشاشة الدائمة متوقفة\nتوفير البطارية</string>
+    <string name="quick_settings_caffeine_label">الكافيين</string>
+    <string name="accessibility_quick_settings_caffeine_off">الكافيين متوقف.</string>
+    <string name="accessibility_quick_settings_caffeine_on">الكافيين مفعّل.</string>
+    <string name="quick_settings_heads_up_label">الإشعارات المنبثقة</string>
+    <string name="accessibility_quick_settings_heads_up_off">الإشعارات المنبثقة متوقفة.</string>
+    <string name="accessibility_quick_settings_heads_up_on">الإشعارات المنبثقة مفعّلة.</string>
+
+    <string name="quick_settings_powershare_label">Wireless PowerShare</string>
+    <string name="quick_settings_powershare_off_powersave_label">Wireless PowerShare متوقف\nتوفير البطارية</string>
+    <string name="quick_settings_powershare_off_low_battery_label">Wireless PowerShare متوقف\nمستوى البطارية منخفض جدًا</string>
+    <string name="quick_settings_powershare_enabled_label">Wireless PowerShare مفعّل</string>
+    <string name="quick_settings_reading_mode">وضع القراءة</string>
+    <string name="accessibility_quick_settings_reading_mode_on">وضع القراءة مفعّل.</string>
+    <string name="accessibility_quick_settings_reading_mode_off">وضع القراءة متوقف.</string>
+    <string name="quick_settings_sync_label">المزامنة</string>
+    <string name="accessibility_quick_settings_sync_off">المزامنة متوقفة.</string>
+    <string name="accessibility_quick_settings_sync_on">المزامنة مفعّلة.</string>
+    <string name="quick_settings_profiles_label">ملفات النظام الشخصية</string>
+    <string name="accessibility_quick_settings_profiles_off">الملفات الشخصية متوقفة.</string>
+    <string name="accessibility_quick_settings_profiles">الملف الشخصي: %s.</string>
+
+    <string name="quick_settings_usb_tether_label">مشاركة الإنترنت عبر USB</string>
+    <string name="quick_settings_vpn_label">VPN</string>
+    <string name="quick_settings_vpn_connect_dialog_title">الاتصال بـ\u2026</string>
+    <string name="vpn_credentials_hint">أدخل بيانات الاعتماد للاتصال بـ %s</string>
+    <string name="vpn_credentials_username">اسم المستخدم</string>
+    <string name="vpn_credentials_password">كلمة المرور</string>
+    <string name="vpn_credentials_dialog_connect">اتصال</string>
+    <string name="status_bar_firewall">جدار الحماية</string>
+    <string name="battery_notification_channel_tv">تحذير البطارية</string>
+
+    <string name="screenshot_delete_label">حذف</string>
+    <string name="screenshot_delete_description">حذف لقطة الشاشة</string>
+    <string name="screenrecord_lowquality_label">جودة أقل</string>
+    <string name="screenrecord_lowquality_summary">لحجم ملف أصغر</string>
+    <string name="screenrecord_longer_timeout_switch_label">حد أكبر لحجم الملف</string>
+    <string name="screenrecord_longer_timeout_switch_summary">تقييد حجم التسجيل إلى 15 غيغابايت</string>
+    <string name="screenrecord_skip_time_label">تخطي المؤقت</string>
+    <string name="screenrecord_skip_time_summary">إزالة الانتظار لمدة 3 ثوانٍ</string>
+    <string name="screenrecord_hevc_switch_label">ترميز HEVC</string>
+    <string name="screenrecord_hevc_switch_summary">استخدام برنامج ترميز HEVC الأكثر كفاءة</string>
+
+    <string name="camera">الكاميرا</string>
+    <string name="clock_timer">الساعة/المؤقت</string>
+    <string name="calculator">الآلة الحاسبة</string>
+    <string name="gallery">المعرض</string>
+    <string name="no_default_app_found">لم يتم العثور على تطبيق %1$s افتراضي</string>
+    <string name="weather_data_unavailable">بيانات غير متاحة</string>
+    <string name="omnijaws_weather">OmniJaws</string>
+    <string name="quick_settings_data_label">بيانات الجوّال</string>
+    <string name="quick_settings_ringer_label">وضع الرنين</string>
+    <string name="torch_active">المصباح نشط</string>
+    <string name="google_wallet">Google Wallet</string>
+
+    <string name="accessibility_next_alarm">المنبّه التالي عند %s</string>
+    <string name="accessibility_smartspace_page">الصفحة %1$d من %2$d</string>
+    <string name="generic_smartspace_concatenated_desc">%1$s، %2$s</string>
+    <string name="smartspace_content_desc">لمحة سريعة</string>
+    <string name="smartspace_flight_qr_code">رمز QR</string>
+    <string name="smartspace_icu_date_pattern">EEEMMMd</string>
+    <string name="keyguard_face_failed_use_fp">@string/fingerprint_dialog_use_fingerprint_instead</string>
+    <string name="accessibility_casting">@string/quick_settings_casting</string>
+    <string name="quick_settings_screensaver_label">شاشة التوقف</string>
+    <string name="media_projection_entry_app_permission_dialog_option_text_single_app">@string/screen_share_permission_dialog_option_single_app</string>
+    <string name="media_projection_entry_app_permission_dialog_option_text_entire_screen">@string/screen_share_permission_dialog_option_entire_screen</string>
+    <string name="zen_alarm_warning_indef">لن تسمع المنبّه التالي %1$s ما لم توقف هذا الوضع قبل ذلك</string>
+    <string name="accessibility_smartspace_previous_page">الصفحة السابقة</string>
+    <string name="accessibility_smartspace_next_page">الصفحة التالية</string>
+
+    <string-array name="tile_states_default">
+        <item>@string/tile_unavailable</item>
+        <item>@string/switch_bar_off</item>
+        <item>@string/switch_bar_on</item>
+    </string-array>
+</resources>
