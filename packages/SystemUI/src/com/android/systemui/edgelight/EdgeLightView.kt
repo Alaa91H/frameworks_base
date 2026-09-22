@@ -273,9 +273,9 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
 
         val save = canvas.save()
         clipToEnabledEdges(canvas)
-        val needsFrameGeometry =
-            edgeStyle == STYLE_ROUNDED && positionTop && positionSides && positionBottom
-        if (needsFrameGeometry) {
+        // Preserve rounded geometry even when only a subset of edges is enabled.
+        // The directional clip below limits the rendered portions without flattening corners.
+        if (edgeStyle == STYLE_ROUNDED) {
             drawRoundedEdges(canvas)
             drawGlowRounded(canvas)
         } else {
