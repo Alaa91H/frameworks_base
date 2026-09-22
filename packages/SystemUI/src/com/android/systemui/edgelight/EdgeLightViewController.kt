@@ -221,9 +221,12 @@ constructor(
 
     override fun onDozingChanged(dozing: Boolean) {
         isDozing = dozing
-        val pendingScreenOff = pendingTriggerState == TriggerState.SCREEN_OFF &&
+        val hasRecentNotification =
             System.currentTimeMillis() - lastNotificationTime <= pendingStateWindowMs
-        if (dozing && pendingScreenOff && currentSettings.screenOffEnabled) {
+        val pendingScreenOff = pendingTriggerState == TriggerState.SCREEN_OFF
+        if (dozing && hasRecentNotification &&
+            ((pendingScreenOff && currentSettings.screenOffEnabled) ||
+                currentSettings.aodEnabled)) {
             showEdgeLights()
         } else if (!isStateEnabled(currentTriggerState())) {
             stopEdgeLight()
@@ -267,10 +270,16 @@ constructor(
         if (!currentSettings.isEnabled || !pulsing) return
 
         val now = System.currentTimeMillis()
-        val triggerState = if (now - lastNotificationTime <= pendingStateWindowMs) {
-            pendingTriggerState ?: currentTriggerState()
+        val currentState = currentTriggerState()
+        val pendingState = if (now - lastNotificationTime <= pendingStateWindowMs) {
+            pendingTriggerState
         } else {
-            currentTriggerState()
+            null
+        }
+        val triggerState = when {
+            pendingState != null && isStateEnabled(pendingState) -> pendingState
+            isStateEnabled(currentState) -> currentState
+            else -> pendingState ?: currentState
         }
 
         if (isStateEnabled(triggerState)) {
