@@ -129,6 +129,7 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
     private var pathLength: Float = 0f
 
     private var useRainbowGradient = false
+    private var solidPaintColor: Int = Color.WHITE
 
     private var glowBaseColor: Int = Color.WHITE
 
@@ -137,18 +138,31 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         set(value) { isVisible = value }
 
     var paintColor: Int
-        get() = edgePaint.color
+        get() = solidPaintColor
         set(value) {
-            if (value != COLOR_RAINBOW) {
-                useRainbowGradient = false
+            solidPaintColor = value
+            if (!useRainbowGradient) {
                 edgePaint.shader = null
                 edgePaint.color = value
                 edgePaint.alpha = 255
                 glowBaseColor = resolveGlowBase(value)
-            } else {
-                useRainbowGradient = true
+            }
+            invalidate()
+        }
+
+    var rainbowEnabled: Boolean
+        get() = useRainbowGradient
+        set(value) {
+            if (useRainbowGradient == value) return
+            useRainbowGradient = value
+            if (value) {
                 glowBaseColor = RAINBOW[0]
                 updateRainbowGradient()
+            } else {
+                edgePaint.shader = null
+                edgePaint.color = solidPaintColor
+                edgePaint.alpha = 255
+                glowBaseColor = resolveGlowBase(solidPaintColor)
             }
             invalidate()
         }
