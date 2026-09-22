@@ -562,8 +562,10 @@ public class NetworkTraffic extends TextView implements TunerService.Tunable,
                     setLineSpacing(0f, 0.95f);
                     setLayoutDirection(View.LAYOUT_DIRECTION_LOCALE);
                     setTextDirection(View.TEXT_DIRECTION_LOCALE);
-                    setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
-                    setGravity(Gravity.END|Gravity.CENTER_VERTICAL);
+                    // Keep the fixed-width traffic indicator visually balanced in both LTR
+                    // and RTL so unused width does not look like an extra gap next to one icon.
+                    setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+                    setGravity(Gravity.CENTER);
                     setElegantTextHeight(false);
                     setIncludeFontPadding(false);
                 }
