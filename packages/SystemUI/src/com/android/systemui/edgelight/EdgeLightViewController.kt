@@ -89,16 +89,18 @@ constructor(
 
     fun getEdgeLightView(): FrameLayout = edgeLightView
 
+    private fun isMulticolorMode(): Boolean {
+        return if (currentSettings.animationEffect == EFFECT_AURORA) {
+            currentSettings.auroraColorMode == AURORA_MULTICOLOR
+        } else {
+            currentSettings.colorMode == COLOR_MODE_RAINBOW
+        }
+    }
+
     private fun getColor(): Int {
-        // Aurora deliberately has an explicit color policy independent of the normal color list.
-        // Fixed Aurora uses the user-selected custom color; multicolor Aurora uses the animated
-        // high-resolution spectrum rendered by EdgeLightView.
+        // Fixed Aurora intentionally uses the custom picker so it remains a true single color.
         if (currentSettings.animationEffect == EFFECT_AURORA) {
-            return if (currentSettings.auroraColorMode == AURORA_MULTICOLOR) {
-                EdgeLightView.COLOR_RAINBOW
-            } else {
-                currentSettings.customColor
-            }
+            return currentSettings.customColor
         }
 
         return when (currentSettings.colorMode) {
@@ -108,9 +110,14 @@ constructor(
                 .getWallpaperColors(WallpaperManager.FLAG_SYSTEM)
                 ?.primaryColor?.toArgb() ?: Utils.getColorAccentDefaultColor(context)
             COLOR_MODE_NOTIFICATION -> lastNotifColor
-            COLOR_MODE_RAINBOW -> EdgeLightView.COLOR_RAINBOW
+            COLOR_MODE_RAINBOW -> Utils.getColorAccentDefaultColor(context)
             else -> Utils.getColorAccentDefaultColor(context)
         }
+    }
+
+    private fun applyRenderColor() {
+        edgeLightView.paintColor = getColor()
+        edgeLightView.rainbowEnabled = isMulticolorMode()
     }
 
     private fun applySettings(settings: EdgeLightSettings) {
@@ -119,8 +126,8 @@ constructor(
             return
         }
 
+        applyRenderColor()
         edgeLightView.apply {
-            paintColor = getColor()
             userPulseCount = settings.pulseCount
             userStrokeWidth = settings.strokeWidth
             edgeStyle = settings.edgeStyle
@@ -165,8 +172,8 @@ constructor(
             return
         }
 
+        applyRenderColor()
         edgeLightView.apply {
-            paintColor = getColor()
             visible = true
             pulseRunning = true
         }
