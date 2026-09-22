@@ -41,8 +41,8 @@ import com.android.systemui.statusbar.systemstatusicons.ui.viewmodel.SystemStatu
 import com.android.systemui.statusbar.systemstatusicons.ui.viewmodel.SystemStatusIconsViewModel
 
 /**
- * Composable that displays the system status icons. This does not handle any spacing or alignment.
- * That is expected to be done in a container composable like a Row.
+ * Composable that displays the system status icons using the shared status-bar inter-item spacing.
+ * Individual icon groups own only their internal geometry and must not add outer side margins.
  */
 @Composable
 fun SystemStatusIcons(
