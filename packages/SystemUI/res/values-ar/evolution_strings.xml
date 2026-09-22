@@ -196,4 +196,37 @@
     <string name="ax_dynamic_bar_sports_halftime">نهاية الشوط الأول</string>
     <string name="ax_dynamic_bar_sports_upcoming">قادم</string>
 
+    <string name="quick_settings_screenshot_label">لقطة شاشة</string>
+    <string name="reevaluating_system_theme">جارٍ إعادة تقييم مظهر النظام… يُرجى الانتظار بضع ثوانٍ</string>
+    <string name="weather_condition_clouds">غائم</string>
+    <string name="weather_condition_rain">ممطر</string>
+    <string name="weather_condition_clear">سماء صافية</string>
+    <string name="weather_condition_storm">عاصف</string>
+    <string name="weather_condition_snow">ثلجي</string>
+    <string name="weather_condition_wind">رياح</string>
+    <string name="weather_condition_mist">ضبابي</string>
+    <string name="omnijaws_service_error">خطأ في تحميل بيانات الطقس</string>
+    <string name="omnijaws_service_unknown">لا توجد بيانات طقس</string>
+    <string name="omnijaws_label_default">الطقس</string>
+    <string name="clock_ide_weather_data_unavailable">غير متاح</string>
+    <string name="usage_data">مستخدم اليوم</string>
+    <string name="usage_data_weekly">مستخدم هذا الأسبوع</string>
+    <string name="usage_data_default_suffix">البيانات</string>
+    <string name="usage_wifi_default_suffix">Wi-Fi</string>
+    <string name="low_battery_notification_text_ebs">شغّل توفير البطارية الفائق لإطالة عمر البطارية</string>
+    <string name="severe_battery_notification_title">متبقي <xliff:g id="percentage" example="5%">%s</xliff:g> من البطارية</string>
+    <string name="severe_battery_notification_text">شغّل توفير البطارية الفائق. سيؤدي ذلك إلى إيقاف جميع التطبيقات غير الأساسية مؤقتًا</string>
+    <string name="severe_battery_notification_switch_text">هل تريد التبديل إلى توفير البطارية الفائق؟\n\nسيؤدي ذلك إلى إيقاف جميع التطبيقات غير الأساسية وإشعاراتها مؤقتًا</string>
+    <string name="severe_low_battery_dialog_switch_action_text">تبديل</string>
+    <string name="extreme_low_battery_notification_title">مستوى البطارية منخفض جدًا</string>
+    <string name="extreme_low_battery_notification_text">سيتم إيقاف هاتفك إذا لم يتم شحنه قريبًا</string>
+    <string name="saver_confirmation_dialog_title">مرحبًا بك في توفير البطارية</string>
+    <string name="saver_confirmation_dialog_subtitle">اختر الوضع الذي تريد استخدامه</string>
+    <string name="saver_confirmation_dialog_title_standard_mode">توفير البطارية القياسي</string>
+    <string name="saver_confirmation_dialog_summary_standard_mode">يحد من التأثيرات المرئية والنشاط في الخلفية. ويشغّل المظهر الداكن إذا لم يكن مفعّلًا.</string>
+    <string name="saver_confirmation_dialog_title_extreme_mode">توفير البطارية الفائق</string>
+    <string name="saver_confirmation_dialog_summary_extreme_mode">يتضمن جميع التغييرات المذكورة أعلاه، ويوقف مؤقتًا أيضًا التطبيقات غير الأساسية وإشعاراتها.</string>
+    <string name="saver_confirmation_dialog_setup_action">إعداد</string>
+    <string name="screenshot_save_to_storage_label">حفظ في وحدة التخزين</string>
+
 </resources>
