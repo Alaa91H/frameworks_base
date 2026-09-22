@@ -88,6 +88,17 @@ final class BatterySaverCustomActions extends ContentObserver {
     private final ArrayMap<Integer, Long> mPreviousScreenTimeouts = new ArrayMap<>();
 
     private final ContentObserver mScreenTimeoutObserver;
+    private final SubscriptionManager.OnSubscriptionsChangedListener mSubscriptionsChangedListener =
+            new SubscriptionManager.OnSubscriptionsChangedListener() {
+                @Override
+                public void onSubscriptionsChanged() {
+                    if (mFullBatterySaverEnabled
+                            && Settings.Global.getInt(
+                                    mResolver, SETTING_DISABLE_5G, 0) != 0) {
+                        update5g(true);
+                    }
+                }
+            };
     private final BroadcastReceiver mUserSwitchReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -123,6 +134,10 @@ final class BatterySaverCustomActions extends ContentObserver {
                 mScreenTimeoutObserver, UserHandle.USER_ALL);
         final IntentFilter userFilter = new IntentFilter(Intent.ACTION_USER_SWITCHED);
         mContext.registerReceiverForAllUsers(mUserSwitchReceiver, userFilter, null, mHandler);
+        if (mSubscriptionManager != null) {
+            mSubscriptionManager.addOnSubscriptionsChangedListener(
+                    command -> mHandler.post(command), mSubscriptionsChangedListener);
+        }
         loadCpuMaxFreqBackups();
         loadNetworkTypeBackups();
         loadScreenTimeoutBackups();
