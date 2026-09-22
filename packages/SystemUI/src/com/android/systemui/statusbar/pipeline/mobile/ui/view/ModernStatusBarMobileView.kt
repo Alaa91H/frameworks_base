@@ -82,7 +82,8 @@ class ModernStatusBarMobileView(context: Context, attrs: AttributeSet?) :
 
         // RAT indicator container
         requireViewById<FrameLayout>(R.id.mobile_type_container).apply {
-            // marginStart is moved to the outer group
+            // The network type's start edge is flush with the signal group; only its
+            // internal end separation is retained. Top-level spacing is owned by the parent.
             (layoutParams as MarginLayoutParams).marginStart = 0
             (layoutParams as MarginLayoutParams).marginEnd =
                 context.resources.getDimensionPixelSize(
