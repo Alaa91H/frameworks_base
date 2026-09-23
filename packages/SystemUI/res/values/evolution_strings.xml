@@ -65,6 +65,8 @@
     <!-- Preferred network tile -->
     <string name="quick_settings_preferred_network_label">Preferred network</string>
     <string name="quick_settings_preferred_network_unsupported">Unsupported</string>
+    <string name="quick_settings_preferred_network_no_data_sim">No data SIM</string>
+    <string name="quick_settings_preferred_network_in_call">%s · In call</string>
 
     <!-- Refresh Rate Tile -->
     <string name="refresh_rate_tile_label">Refresh rate</string>
@@ -97,6 +99,8 @@
 
     <!-- Autobrightness tile -->
     <string name="quick_settings_autobrightness_label">Auto brightness</string>
+    <string name="quick_settings_autobrightness_on">On</string>
+    <string name="quick_settings_autobrightness_off">Off</string>
 
     <!-- VPN tethering QS tile -->
     <string name="vpn_tethering_label">VPN tethering</string>
