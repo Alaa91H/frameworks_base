@@ -70,6 +70,14 @@
     <string name="accessibility_quick_settings_wifi_auto_off_off">Wi-Fi auto-off off.</string>
     <string name="accessibility_quick_settings_bluetooth_auto_off_on">Bluetooth auto-off on.</string>
     <string name="accessibility_quick_settings_bluetooth_auto_off_off">Bluetooth auto-off off.</string>
+    <string name="quick_settings_state_on">On</string>
+    <string name="quick_settings_state_off">Off</string>
+    <string name="quick_settings_edge_light_label">Edge lighting</string>
+    <string name="quick_settings_charging_schedule_label">Charging schedule</string>
+    <string name="quick_settings_charging_schedule_range">%1$s–%2$s</string>
+    <string name="quick_settings_charging_schedule_control_off">Charging control off</string>
+    <string name="quick_settings_charging_schedule_limit_required">Limit mode required</string>
+    <string name="quick_settings_charging_schedule_unavailable">Unavailable</string>
     <string name="quick_settings_charging_control_label">Charging control</string>
     <string name="quick_settings_charging_control_off">Off</string>
     <string name="quick_settings_charging_control_on">On</string>
