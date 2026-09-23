@@ -19,7 +19,6 @@ package com.android.systemui.smartpixel.ui
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
-import android.os.UserHandle
 import android.service.quicksettings.Tile
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.android.internal.jank.InteractionJankMonitor
