@@ -132,37 +132,21 @@ public class PowerShareTile extends QSTileImpl<BooleanState>
 
     @Override
     public void onPowerSaveChanged(boolean isPowerSave) {
-        refreshState();
-    }
-
-    @Override
-    public void refreshState() {
-        updatePowerShareState();
-        super.refreshState();
-    }
-
-    private void updatePowerShareState() {
-        if (mPowerShare == null) {
-            return;
-        }
-
-        if (mBatteryController.isPowerSave()) {
+        if (isPowerSave && mPowerShare != null) {
             try {
                 mPowerShare.setEnabled(false);
             } catch (Exception e) {
                 Log.w(TAG, "Unable to disable PowerShare for Battery Saver", e);
             }
         }
+        refreshState();
+    }
 
-        try {
-            final boolean enabled = mPowerShare.isEnabled();
-            if (enabled && mNotification != null) {
-                mNotificationManager.notify(NOTIFICATION_ID, mNotification);
-            } else {
-                mNotificationManager.cancel(NOTIFICATION_ID);
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "Unable to read PowerShare state", e);
+    private void updateNotification(boolean enabled) {
+        if (enabled && mNotification != null) {
+            mNotificationManager.notify(NOTIFICATION_ID, mNotification);
+        } else {
+            mNotificationManager.cancel(NOTIFICATION_ID);
         }
     }
 
@@ -221,11 +205,18 @@ public class PowerShareTile extends QSTileImpl<BooleanState>
 
         try {
             state.value = mPowerShare.isEnabled();
+            if (mBatteryController.isPowerSave() && state.value) {
+                mPowerShare.setEnabled(false);
+                state.value = false;
+            }
         } catch (Exception e) {
             Log.w(TAG, "Unable to read PowerShare state", e);
             setUnavailableState(state, R.string.quick_settings_powershare_unavailable);
+            updateNotification(false);
             return;
         }
+
+        updateNotification(state.value);
 
         if (mBatteryController.isPowerSave()) {
             state.state = Tile.STATE_UNAVAILABLE;
