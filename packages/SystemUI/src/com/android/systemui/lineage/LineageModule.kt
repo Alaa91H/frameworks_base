@@ -27,8 +27,10 @@ import com.android.systemui.qs.tiles.BluetoothAutoOffTile
 import com.android.systemui.qs.tiles.CPUInfoTile
 import com.android.systemui.qs.tiles.CaffeineTile
 import com.android.systemui.qs.tiles.ChargingControlTile
+import com.android.systemui.qs.tiles.ChargingScheduleTile
 import com.android.systemui.qs.tiles.CompassTile
 import com.android.systemui.qs.tiles.DataSwitchTile
+import com.android.systemui.qs.tiles.EdgeLightTile
 import com.android.systemui.qs.tiles.FPSInfoTile
 import com.android.systemui.qs.tiles.HeadsUpTile
 import com.android.systemui.qs.tiles.LocaleTile
@@ -107,6 +109,19 @@ interface LineageModule {
     @IntoMap
     @StringKey(ChargingControlTile.TILE_SPEC)
     fun bindChargingControlTile(chargingControlTile: ChargingControlTile): QSTileImpl<*>
+
+    /** Inject ChargingScheduleTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(ChargingScheduleTile.TILE_SPEC)
+    fun bindChargingScheduleTile(chargingScheduleTile: ChargingScheduleTile): QSTileImpl<*>
+
+    /** Inject EdgeLightTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(EdgeLightTile.TILE_SPEC)
+    fun bindEdgeLightTile(edgeLightTile: EdgeLightTile): QSTileImpl<*>
+
 
     /** Inject CompassTile into tileMap in QSModule */
     @Binds
@@ -341,6 +356,36 @@ interface LineageModule {
                     ),
                 instanceId = uiEventLogger.getNewInstanceId(),
                 category = TileCategory.UTILITIES,
+            )
+
+        @Provides
+        @IntoMap
+        @StringKey(ChargingScheduleTile.TILE_SPEC)
+        fun provideChargingScheduleTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(ChargingScheduleTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_qs_charging_schedule,
+                        labelRes = R.string.quick_settings_charging_schedule_label
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.UTILITIES,
+            )
+
+        @Provides
+        @IntoMap
+        @StringKey(EdgeLightTile.TILE_SPEC)
+        fun provideEdgeLightTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(EdgeLightTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_qs_edge_light,
+                        labelRes = R.string.quick_settings_edge_light_label
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.DISPLAY,
             )
 
         @Provides
