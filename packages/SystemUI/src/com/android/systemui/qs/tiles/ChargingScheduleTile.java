@@ -35,7 +35,6 @@ import com.android.systemui.res.R;
 import lineageos.health.HealthInterface;
 import lineageos.providers.LineageSettings;
 
-import java.text.DateFormat as JavaDateFormat;
 import java.util.Calendar;
 
 import javax.inject.Inject;
@@ -157,9 +156,15 @@ public class ChargingScheduleTile extends QSTileImpl<BooleanState> {
         final boolean enabled = isScheduleEnabled();
         state.value = enabled;
         state.state = enabled ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
-        state.secondaryLabel = enabled
-                ? getScheduleLabel(healthInterface)
-                : mContext.getString(R.string.quick_settings_state_off);
+        try {
+            state.secondaryLabel = enabled
+                    ? getScheduleLabel(healthInterface)
+                    : mContext.getString(R.string.quick_settings_state_off);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Unable to read charging schedule", e);
+            setUnavailableState(state, R.string.quick_settings_charging_schedule_unavailable);
+            return;
+        }
         state.stateDescription = state.secondaryLabel;
         state.contentDescription = state.label + ", " + state.secondaryLabel;
     }
