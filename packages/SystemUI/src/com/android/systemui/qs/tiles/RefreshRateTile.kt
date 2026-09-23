@@ -30,6 +30,7 @@ import android.provider.Settings.System.PEAK_REFRESH_RATE
 import android.service.quicksettings.Tile
 import android.util.Log
 import android.view.Display
+import android.widget.Button
 
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent
 import com.android.internal.logging.MetricsLogger
@@ -161,6 +162,7 @@ class RefreshRateTile @Inject constructor(
     override protected fun handleUpdateState(state: State, arg: Any?) {
         state.label = tileLabel
         state.state = Tile.STATE_ACTIVE
+        state.expandedAccessibilityClassName = Button::class.java.name
         state.secondaryLabel = getTitleForMode(refreshRateMode)
         state.stateDescription = state.secondaryLabel
         state.contentDescription = "$tileLabel, ${state.secondaryLabel}"
