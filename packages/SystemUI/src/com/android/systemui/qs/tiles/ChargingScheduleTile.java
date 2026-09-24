@@ -43,6 +43,7 @@ import javax.inject.Inject;
 public class ChargingScheduleTile extends QSTileImpl<BooleanState> {
 
     private static final String TAG = "ChargingScheduleTile";
+    private static final int SECONDS_PER_DAY = 24 * 60 * 60;
 
     public static final String TILE_SPEC = "charging_schedule";
 
@@ -244,26 +245,43 @@ public class ChargingScheduleTile extends QSTileImpl<BooleanState> {
     }
 
     private CharSequence getScheduleLabel(HealthInterface healthInterface) {
-        final int start = LineageSettings.System.getIntForUser(
-                mContext.getContentResolver(),
-                LineageSettings.System.CHARGING_CONTROL_LIMIT_START_TIME,
-                healthInterface.getStartTime(),
-                mUserId);
-        final int end = LineageSettings.System.getIntForUser(
-                mContext.getContentResolver(),
-                LineageSettings.System.CHARGING_CONTROL_LIMIT_END_TIME,
-                healthInterface.getTargetTime(),
-                mUserId);
+        final int defaultStart = healthInterface.getStartTime();
+        final int defaultEnd = healthInterface.getTargetTime();
+        final int start = sanitizeSecondOfDay(
+                LineageSettings.System.getIntForUser(
+                        mContext.getContentResolver(),
+                        LineageSettings.System.CHARGING_CONTROL_LIMIT_START_TIME,
+                        defaultStart,
+                        mUserId),
+                defaultStart);
+        final int end = sanitizeSecondOfDay(
+                LineageSettings.System.getIntForUser(
+                        mContext.getContentResolver(),
+                        LineageSettings.System.CHARGING_CONTROL_LIMIT_END_TIME,
+                        defaultEnd,
+                        mUserId),
+                defaultEnd);
         return mContext.getString(
                 R.string.quick_settings_charging_schedule_range,
                 formatTime(start),
                 formatTime(end));
     }
 
+    static int sanitizeSecondOfDay(int value, int fallback) {
+        if (value >= 0 && value < SECONDS_PER_DAY) {
+            return value;
+        }
+        if (fallback >= 0 && fallback < SECONDS_PER_DAY) {
+            return fallback;
+        }
+        return 0;
+    }
+
     private String formatTime(int secondOfDay) {
+        final int safeSecondOfDay = sanitizeSecondOfDay(secondOfDay, 0);
         final Calendar calendar = Calendar.getInstance();
-        calendar.set(Calendar.HOUR_OF_DAY, secondOfDay / 3600);
-        calendar.set(Calendar.MINUTE, (secondOfDay % 3600) / 60);
+        calendar.set(Calendar.HOUR_OF_DAY, safeSecondOfDay / 3600);
+        calendar.set(Calendar.MINUTE, (safeSecondOfDay % 3600) / 60);
         calendar.set(Calendar.SECOND, 0);
         calendar.set(Calendar.MILLISECOND, 0);
         return DateFormat.getTimeFormat(mContext).format(calendar.getTime());
