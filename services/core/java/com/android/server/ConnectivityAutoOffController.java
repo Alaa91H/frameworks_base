@@ -237,7 +237,7 @@ final class ConnectivityAutoOffController {
         cancelWifiAlarm();
         mWifiAlarmAt = SystemClock.elapsedRealtime() + timeout;
         mWifiAlarmTimeout = timeout;
-        mAlarmManager.setExactAndAllowWhileIdle(
+        mAlarmManager.setAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 mWifiAlarmAt,
                 mWifiAlarmIntent);
@@ -257,7 +257,7 @@ final class ConnectivityAutoOffController {
         cancelBluetoothAlarm();
         mBluetoothAlarmAt = SystemClock.elapsedRealtime() + timeout;
         mBluetoothAlarmTimeout = timeout;
-        mAlarmManager.setExactAndAllowWhileIdle(
+        mAlarmManager.setAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 mBluetoothAlarmAt,
                 mBluetoothAlarmIntent);
