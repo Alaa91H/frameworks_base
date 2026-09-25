@@ -7585,6 +7585,48 @@ public final class Settings {
         public static final String EDGE_LIGHT_ANIMATION_EFFECT = "edge_light_animation_effect";
 
         /**
+         * Whether edge light is rendered on the top edge
+         * @hide
+         */
+        public static final String EDGE_LIGHT_POSITION_TOP = "edge_light_position_top";
+
+        /**
+         * Whether edge light is rendered on the left and right edges
+         * @hide
+         */
+        public static final String EDGE_LIGHT_POSITION_SIDES = "edge_light_position_sides";
+
+        /**
+         * Whether edge light is rendered on the bottom edge
+         * @hide
+         */
+        public static final String EDGE_LIGHT_POSITION_BOTTOM = "edge_light_position_bottom";
+
+        /**
+         * Whether edge light may run while the display is fully on
+         * @hide
+         */
+        public static final String EDGE_LIGHT_SCREEN_ON = "edge_light_screen_on";
+
+        /**
+         * Whether edge light may run for a notification received while the display is off
+         * @hide
+         */
+        public static final String EDGE_LIGHT_SCREEN_OFF = "edge_light_screen_off";
+
+        /**
+         * Whether edge light may run while the always-on display is active
+         * @hide
+         */
+        public static final String EDGE_LIGHT_AOD = "edge_light_aod";
+
+        /**
+         * Aurora effect color mode: single or multicolor
+         * @hide
+         */
+        public static final String EDGE_LIGHT_AURORA_COLOR_MODE = "edge_light_aurora_color_mode";
+
+        /**
          * Use doubletap as doze pulse triggers
          * @hide
          */

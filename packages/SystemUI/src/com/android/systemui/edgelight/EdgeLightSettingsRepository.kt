@@ -41,6 +41,13 @@ data class EdgeLightSettings(
     val animationEffect: String,
     val spread: Float = EDGE_LIGHT_DEFAULT_SPREAD,
     val intensity: Float = EDGE_LIGHT_DEFAULT_INTENSITY,
+    val positionTop: Boolean,
+    val positionSides: Boolean,
+    val positionBottom: Boolean,
+    val runScreenOn: Boolean,
+    val runScreenOff: Boolean,
+    val runAod: Boolean,
+    val auroraColorMode: String,
 )
 
 class EdgeLightSettingsRepository(context: Context) {
@@ -59,6 +66,13 @@ class EdgeLightSettingsRepository(context: Context) {
         observeSettingString(SETTING_ANIMATION_EFFECT, "none"),
         observeSettingInt(SETTING_SPREAD, (EDGE_LIGHT_DEFAULT_SPREAD * 100).toInt()),
         observeSettingInt(SETTING_INTENSITY, (EDGE_LIGHT_DEFAULT_INTENSITY * 100).toInt()),
+        observeSettingInt(SETTING_POSITION_TOP, 0),
+        observeSettingInt(SETTING_POSITION_SIDES, 1),
+        observeSettingInt(SETTING_POSITION_BOTTOM, 0),
+        observeSettingInt(SETTING_SCREEN_ON, 0),
+        observeSettingInt(SETTING_SCREEN_OFF, 1),
+        observeSettingInt(SETTING_AOD, 1),
+        observeSettingString(SETTING_AURORA_COLOR_MODE, "single"),
     ) { flows: Array<Any?> ->
         val enabled = flows[0] as Int
         val mode = flows[1] as String
@@ -69,6 +83,13 @@ class EdgeLightSettingsRepository(context: Context) {
         val effect = flows[6] as String
         val spreadRaw = flows[7] as Int
         val intensityRaw = flows[8] as Int
+        val positionTop = flows[9] as Int
+        val positionSides = flows[10] as Int
+        val positionBottom = flows[11] as Int
+        val screenOn = flows[12] as Int
+        val screenOff = flows[13] as Int
+        val aod = flows[14] as Int
+        val auroraColorMode = flows[15] as String
 
         val pulsesClamped = pulses.coerceIn(1, 5)
         val widthClamped = width.coerceIn(2, 32)
@@ -76,7 +97,9 @@ class EdgeLightSettingsRepository(context: Context) {
         val intensityClamped = (intensityRaw / 100f).coerceIn(0f, 1f)
         EdgeLightSettings(
             enabled == 1, mode, color, pulsesClamped, widthClamped, style, effect,
-            spreadClamped, intensityClamped
+            spreadClamped, intensityClamped,
+            positionTop == 1, positionSides == 1, positionBottom == 1,
+            screenOn == 1, screenOff == 1, aod == 1, auroraColorMode
         )
     }.distinctUntilChanged()
 
@@ -90,6 +113,13 @@ class EdgeLightSettingsRepository(context: Context) {
         animationEffect = Settings.System.getStringForUser(resolver, SETTING_ANIMATION_EFFECT, UserHandle.USER_CURRENT) ?: "none",
         spread = Settings.System.getIntForUser(resolver, SETTING_SPREAD, (EDGE_LIGHT_DEFAULT_SPREAD * 100).toInt(), UserHandle.USER_CURRENT) / 100f,
         intensity = Settings.System.getIntForUser(resolver, SETTING_INTENSITY, (EDGE_LIGHT_DEFAULT_INTENSITY * 100).toInt(), UserHandle.USER_CURRENT) / 100f,
+        positionTop = Settings.System.getIntForUser(resolver, SETTING_POSITION_TOP, 0, UserHandle.USER_CURRENT) == 1,
+        positionSides = Settings.System.getIntForUser(resolver, SETTING_POSITION_SIDES, 1, UserHandle.USER_CURRENT) == 1,
+        positionBottom = Settings.System.getIntForUser(resolver, SETTING_POSITION_BOTTOM, 0, UserHandle.USER_CURRENT) == 1,
+        runScreenOn = Settings.System.getIntForUser(resolver, SETTING_SCREEN_ON, 0, UserHandle.USER_CURRENT) == 1,
+        runScreenOff = Settings.System.getIntForUser(resolver, SETTING_SCREEN_OFF, 1, UserHandle.USER_CURRENT) == 1,
+        runAod = Settings.System.getIntForUser(resolver, SETTING_AOD, 1, UserHandle.USER_CURRENT) == 1,
+        auroraColorMode = Settings.System.getStringForUser(resolver, SETTING_AURORA_COLOR_MODE, UserHandle.USER_CURRENT) ?: "single",
     )
 
     private fun observeSettingInt(key: String, default: Int): Flow<Int> = callbackFlow {
@@ -126,5 +156,12 @@ class EdgeLightSettingsRepository(context: Context) {
         private const val SETTING_ANIMATION_EFFECT = Settings.System.EDGE_LIGHT_ANIMATION_EFFECT
         private const val SETTING_SPREAD = Settings.System.EDGE_LIGHT_SPREAD
         private const val SETTING_INTENSITY = Settings.System.EDGE_LIGHT_INTENSITY
+        private const val SETTING_POSITION_TOP = Settings.System.EDGE_LIGHT_POSITION_TOP
+        private const val SETTING_POSITION_SIDES = Settings.System.EDGE_LIGHT_POSITION_SIDES
+        private const val SETTING_POSITION_BOTTOM = Settings.System.EDGE_LIGHT_POSITION_BOTTOM
+        private const val SETTING_SCREEN_ON = Settings.System.EDGE_LIGHT_SCREEN_ON
+        private const val SETTING_SCREEN_OFF = Settings.System.EDGE_LIGHT_SCREEN_OFF
+        private const val SETTING_AOD = Settings.System.EDGE_LIGHT_AOD
+        private const val SETTING_AURORA_COLOR_MODE = Settings.System.EDGE_LIGHT_AURORA_COLOR_MODE
     }
 }

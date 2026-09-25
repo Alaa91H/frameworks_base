@@ -19,6 +19,9 @@ import android.app.Notification
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Color
+import android.os.UserHandle
+import android.provider.Settings
+import android.view.Display
 import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import android.widget.FrameLayout
@@ -54,6 +57,7 @@ constructor(
     private var job: Job? = null
 
     private var isDozing = false
+    private var pendingDisplayMode: DisplayMode? = null
 
     private var lastNotificationKey: String? = null
     private var lastNotificationText: CharSequence? = null
@@ -65,7 +69,8 @@ constructor(
         INSTANCE = this
 
         ScrimUtils.get().addListener(this)
-        updateView()
+        listener.addNotificationHandler(this)
+        observeSettings()
     }
 
     fun getEdgeLightView(): FrameLayout = edgeLightView
@@ -81,28 +86,81 @@ constructor(
             else -> Utils.getColorAccentDefaultColor(context)
         }
 
-    private fun updateView() {
+    private fun observeSettings() {
         job?.cancel()
         job = scope.launch {
-            currentSettings = settingsRepo.settingsFlow.first()
-            if (!currentSettings.isEnabled) {
-                edgeLightView.pulseRunning = false
-                edgeLightView.visible = false
-            } else {
-                edgeLightView.paintColor = getColor()
-                edgeLightView.userPulseCount = currentSettings.pulseCount
-                edgeLightView.userStrokeWidth = currentSettings.strokeWidth
-                edgeLightView.edgeStyle = currentSettings.edgeStyle
-                edgeLightView.animationEffect = currentSettings.animationEffect
-                edgeLightView.userSpread = currentSettings.spread
-                edgeLightView.userIntensity = currentSettings.intensity
+            settingsRepo.settingsFlow.collectLatest { settings ->
+                currentSettings = settings
+                applySettings(settings)
             }
         }
     }
 
+    private fun applySettings(settings: EdgeLightSettings) {
+        edgeLightView.userPulseCount = settings.pulseCount
+        edgeLightView.userStrokeWidth = settings.strokeWidth
+        edgeLightView.edgeStyle = settings.edgeStyle
+        edgeLightView.animationEffect = settings.animationEffect
+        edgeLightView.userSpread = settings.spread
+        edgeLightView.userIntensity = settings.intensity
+        edgeLightView.positionTop = settings.positionTop
+        edgeLightView.positionSides = settings.positionSides
+        edgeLightView.positionBottom = settings.positionBottom
+        edgeLightView.auroraColorMode = settings.auroraColorMode
+        edgeLightView.paintColor = getColor()
+
+        if (!settings.isEnabled ||
+                (!settings.positionTop && !settings.positionSides && !settings.positionBottom) ||
+                !isDisplayModeEnabled(currentDisplayMode())) {
+            edgeLightView.pulseRunning = false
+            edgeLightView.visible = false
+        }
+    }
+
+    private fun currentDisplayMode(): DisplayMode {
+        val state = context.display?.state ?: Display.STATE_ON
+        val alwaysOnEnabled = Settings.Secure.getIntForUser(
+            context.contentResolver,
+            Settings.Secure.DOZE_ALWAYS_ON,
+            0,
+            UserHandle.USER_CURRENT,
+        ) == 1
+
+        return when {
+            state == Display.STATE_ON && !isDozing -> DisplayMode.SCREEN_ON
+            state == Display.STATE_OFF -> DisplayMode.SCREEN_OFF
+            alwaysOnEnabled &&
+                (isDozing || state == Display.STATE_DOZE || state == Display.STATE_DOZE_SUSPEND) ->
+                DisplayMode.AOD
+            // A temporary doze pulse while AOD is disabled still represents the
+            // screen-off notification path, not an always-on display session.
+            else -> DisplayMode.SCREEN_OFF
+        }
+    }
+
+    private fun isDisplayModeEnabled(mode: DisplayMode): Boolean = when (mode) {
+        DisplayMode.SCREEN_ON -> currentSettings.runScreenOn
+        DisplayMode.SCREEN_OFF -> currentSettings.runScreenOff
+        DisplayMode.AOD -> currentSettings.runAod
+    }
+
+    private fun showEdgeLights() {
+        if (!currentSettings.isEnabled) return
+        val mode = pendingDisplayMode ?: currentDisplayMode()
+        if (!isDisplayModeEnabled(mode)) return
+        if (!currentSettings.positionTop &&
+                !currentSettings.positionSides &&
+                !currentSettings.positionBottom) return
+
+        edgeLightView.apply {
+            paintColor = getColor()
+            visible = true
+            pulseRunning = true
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap) {
-        if (!currentSettings.isEnabled || !isDozing
-                || currentSettings.colorMode != COLOR_MODE_NOTIFICATION) return
+        if (!currentSettings.isEnabled) return
 
         val currentKey = sbn.key
         val currentText = sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)
@@ -118,21 +176,32 @@ constructor(
         lastNotificationText = currentText
         lastNotificationTime = now
 
-        val notifColor = sbn.notification?.color ?: Color.TRANSPARENT
+        val notifColor = sbn.notification.color
         val accent = Utils.getColorAccentDefaultColor(context)
-
         lastNotifColor = when {
             notifColor == Color.TRANSPARENT || notifColor == 0 -> accent
             ContrastColorUtil.isColorDark(notifColor) -> accent
             else -> notifColor
         }
-        edgeLightView.paintColor = lastNotifColor
+
+        val mode = currentDisplayMode()
+        pendingDisplayMode = mode
+        if (!isDisplayModeEnabled(mode)) return
+
+        // A fully-on display and AOD can render immediately. A truly-off display must wait
+        // for SystemUI's doze pulse callback, otherwise the panel cannot physically show pixels.
+        if (mode == DisplayMode.SCREEN_ON || mode == DisplayMode.AOD) {
+            showEdgeLights()
+            pendingDisplayMode = null
+        }
     }
 
     override fun onDozingChanged(dozing: Boolean) {
-        if (!currentSettings.isEnabled) return
         isDozing = dozing
-        if (!isDozing) {
+        if (!currentSettings.isEnabled) return
+
+        val mode = currentDisplayMode()
+        if (!isDisplayModeEnabled(mode)) {
             edgeLightView.pulseRunning = false
             edgeLightView.visible = false
         }
@@ -140,19 +209,15 @@ constructor(
 
     override fun onKeyguardShowingChanged(showing: Boolean) {
         if (!currentSettings.isEnabled) return
-        if (!showing) {
+        if (!showing && !currentSettings.runScreenOn) {
             edgeLightView.pulseRunning = false
             edgeLightView.visible = false
-            listener.removeNotificationHandler(this)
-        } else {
-            listener.addNotificationHandler(this)
-            updateView()
         }
     }
 
     override fun onKeyguardFadingAwayChanged(fadingAway: Boolean) {
         if (!currentSettings.isEnabled) return
-        if (fadingAway) {
+        if (fadingAway && !currentSettings.runScreenOn) {
             edgeLightView.pulseRunning = false
             edgeLightView.visible = false
         }
@@ -160,24 +225,35 @@ constructor(
 
     override fun onKeyguardGoingAwayChanged(goingAway: Boolean) {
         if (!currentSettings.isEnabled) return
-        if (goingAway) {
+        if (goingAway && !currentSettings.runScreenOn) {
             edgeLightView.pulseRunning = false
             edgeLightView.visible = false
         }
     }
 
     override fun setPulsing(pulsing: Boolean) {
-        if (!currentSettings.isEnabled || !pulsing || !isDozing) return
-        edgeLightView.apply {
-            visible = true
-            pulseRunning = true
+        if (!currentSettings.isEnabled || !pulsing) return
+
+        val mode = pendingDisplayMode ?: currentDisplayMode()
+        if (!isDisplayModeEnabled(mode)) {
+            pendingDisplayMode = null
+            return
         }
+
+        showEdgeLights()
+        pendingDisplayMode = null
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap) {}
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {}
     override fun onNotificationsInitialized() {}
     override fun onNotificationRankingUpdate(rankingMap: RankingMap) {}
+
+    private enum class DisplayMode {
+        SCREEN_ON,
+        SCREEN_OFF,
+        AOD,
+    }
 
     companion object {
         private const val COLOR_MODE_ACCENT = "accent"
