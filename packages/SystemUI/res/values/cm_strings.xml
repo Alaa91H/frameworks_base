@@ -109,6 +109,8 @@
 
     <!-- USB tethering QS tile -->
     <string name="quick_settings_usb_tether_label">USB tethering</string>
+    <string name="quick_settings_usb_tether_disconnected">USB disconnected</string>
+    <string name="quick_settings_usb_tether_unsupported">Tethering unavailable</string>
 
     <!-- VPN QS tile -->
     <string name="quick_settings_vpn_label">VPN</string>
