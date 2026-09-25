@@ -30,6 +30,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
+import android.widget.Button;
 
 import androidx.annotation.Nullable;
 
@@ -127,6 +128,7 @@ public class DataSwitchTile extends QSTileImpl<BooleanState> {
 
     @Override
     public void handleSetListening(boolean listening) {
+        super.handleSetListening(listening);
         if (listening) {
             if (!mRegistered) {
                 IntentFilter filter = new IntentFilter();
@@ -141,6 +143,16 @@ public class DataSwitchTile extends QSTileImpl<BooleanState> {
             mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
             mRegistered = false;
         }
+    }
+
+    @Override
+    protected void handleDestroy() {
+        if (mRegistered) {
+            mContext.unregisterReceiver(mSimReceiver);
+            mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
+            mRegistered = false;
+        }
+        super.handleDestroy();
     }
 
     private void updateSimCount() {
@@ -206,7 +218,7 @@ public class DataSwitchTile extends QSTileImpl<BooleanState> {
                 state.icon = ResourceIcon.get(R.drawable.ic_qs_data_switch_0);
                 state.value = false;
                 state.secondaryLabel = mContext.getString(R.string.tile_unavailable);
-                state.state = 0;
+                state.state = Tile.STATE_UNAVAILABLE;
                 break;
             case 1:
                 state.icon = ResourceIcon.get(activeSIMZero
@@ -223,10 +235,12 @@ public class DataSwitchTile extends QSTileImpl<BooleanState> {
                 state.value = true;
                 state.secondaryLabel = getActiveSlotName();
                 if (!mCanSwitch) {
-                    state.state = 0;
+                    state.state = Tile.STATE_UNAVAILABLE;
+                    state.secondaryLabel = mContext.getString(
+                            R.string.qs_data_switch_in_call, state.secondaryLabel);
                     Log.d(TAG, "call state isn't idle, set to unavailable.");
                 } else {
-                    state.state = 2;
+                    state.state = Tile.STATE_ACTIVE;
                 }
                 break;
             default:
@@ -238,6 +252,11 @@ public class DataSwitchTile extends QSTileImpl<BooleanState> {
         }
 
         state.label = mContext.getString(R.string.qs_data_switch_label);
+        state.stateDescription = state.secondaryLabel;
+        state.contentDescription = state.secondaryLabel == null
+                ? state.label
+                : state.label + ", " + state.secondaryLabel;
+        state.expandedAccessibilityClassName = Button.class.getName();
     }
 
     @Override
