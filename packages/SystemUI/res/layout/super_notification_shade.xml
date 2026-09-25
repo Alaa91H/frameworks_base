@@ -132,4 +132,14 @@
         android:importantForAccessibility="no"
         sysui:ignoreRightInset="true"
     />
+    <com.android.systemui.biometrics.FaceUnlockScanEffectView
+        android:id="@+id/face_unlock_scan_effect"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        sysui:ignoreRightInset="true" />
+
 </com.android.systemui.shade.NotificationShadeWindowView>
