@@ -31,7 +31,6 @@ import androidx.annotation.Nullable;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.animation.Expandable;
-import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
@@ -54,8 +53,7 @@ public class SoundTile extends QSTileImpl<BooleanState> {
 
     private boolean mListening = false;
 
-    private BroadcastReceiver mReceiver;
-    private IntentFilter mFilter;
+    private final BroadcastReceiver mReceiver;
 
     @Inject
     public SoundTile(
@@ -67,8 +65,7 @@ public class SoundTile extends QSTileImpl<BooleanState> {
             MetricsLogger metricsLogger,
             StatusBarStateController statusBarStateController,
             ActivityStarter activityStarter,
-            QSLogger qsLogger,
-            BroadcastDispatcher broadcastDispatcher
+            QSLogger qsLogger
     ) {
         super(host, uiEventLogger, backgroundLooper, mainHandler, falsingManager, metricsLogger,
                 statusBarStateController, activityStarter, qsLogger);
@@ -100,6 +97,15 @@ public class SoundTile extends QSTileImpl<BooleanState> {
         } else {
             mContext.unregisterReceiver(mReceiver);
         }
+    }
+
+    @Override
+    protected void handleDestroy() {
+        if (mListening) {
+            mContext.unregisterReceiver(mReceiver);
+            mListening = false;
+        }
+        super.handleDestroy();
     }
 
     @Override
