@@ -476,12 +476,18 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
         return (StatusIconState) child.getTag(R.id.status_bar_view_state_tag);
     }
 
+    /*
+     * The measured/layout width already includes a child's padding. Counting that padding again
+     * here creates artificial gaps that vary with each icon implementation (and become especially
+     * noticeable in RTL). Use the actual view bounds so the status bar keeps a compact, consistent
+     * rhythm while preserving every icon's own internal padding.
+     */
     private static int getViewTotalMeasuredWidth(View child) {
-        return child.getMeasuredWidth() + child.getPaddingStart() + child.getPaddingEnd();
+        return child.getMeasuredWidth();
     }
 
     private static int getViewTotalWidth(View child) {
-        return child.getWidth() + child.getPaddingStart() + child.getPaddingEnd();
+        return child.getWidth();
     }
 
     /** A {@link ViewState} that also stores the icon's visibility state. */

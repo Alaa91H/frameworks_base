@@ -51,6 +51,7 @@ public class EvolutionSystemExService extends SystemService {
     private UserManagerInternal mUserManagerInternal;
 
     private FullscreenTaskStackChangeListener mFullscreenTaskStackChangeListener;
+    private ConnectivityAutoOffController mConnectivityAutoOffController;
     private PackageRemovedListener mPackageRemovedListener;
     private ScreenStateListener mScreenStateListener;
 
@@ -72,6 +73,8 @@ public class EvolutionSystemExService extends SystemService {
             };
             mPackageRemovedListener = new PackageRemovedListener();
             mScreenStateListener = new ScreenStateListener();
+            mConnectivityAutoOffController = new ConnectivityAutoOffController(getContext(), mHandler);
+            mConnectivityAutoOffController.start();
             return;
         }
 
