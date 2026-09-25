@@ -71,7 +71,31 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
 
     var animationEffect: String = EFFECT_NONE
 
-    private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    var showTop: Boolean = true
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    var showSides: Boolean = true
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    var showBottom: Boolean = true
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    var auroraColorMode: String = AURORA_COLOR_MULTICOLOR
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.BUTT
     }
@@ -101,6 +125,7 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
 
     private val roundedPath = Path()
     private val roundedRect = RectF()
+    private val positionClipPath = Path()
     private var cornerRadius: Float = 0f
     private var pathLength: Float = 0f
 
@@ -227,17 +252,101 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if (width <= 0 || height <= 0 || (!showTop && !showSides && !showBottom)) return
 
-        when (edgeStyle) {
-            STYLE_ROUNDED -> {
-                drawRoundedEdges(canvas)
-                drawGlowRounded(canvas)
-            }
-            else -> {
-                drawDefaultEdges(canvas)
-                drawGlowDefault(canvas)
-            }
+        // Clip only the light stroke/effect. Glow is drawn separately per enabled region so it can
+        // keep its full inward spread without leaking into a disabled edge.
+        val saveCount = canvas.save()
+        clipToEnabledRegions(canvas)
+
+        val usePerimeterPath = edgeStyle == STYLE_ROUNDED ||
+                showTop || showBottom || animationEffect == EFFECT_AURORA
+        if (usePerimeterPath) {
+            drawPerimeterEdges(canvas, if (edgeStyle == STYLE_ROUNDED) cornerRadius else 0f)
+        } else {
+            drawDefaultEdges(canvas)
         }
+        canvas.restoreToCount(saveCount)
+
+        drawGlowConfigured(canvas)
+    }
+
+    private fun clipToEnabledRegions(canvas: Canvas) {
+        positionClipPath.reset()
+        val density = resources.displayMetrics.density
+        val reach = maxOf(
+            48f * density,
+            edgePaint.strokeWidth * 6f,
+            width * 0.08f,
+            height * 0.04f,
+        ).coerceAtMost(maxOf(width, height).toFloat())
+
+        if (showTop) {
+            positionClipPath.addRect(
+                0f, 0f, width.toFloat(), reach.coerceAtMost(height.toFloat()),
+                Path.Direction.CW
+            )
+        }
+        if (showBottom) {
+            positionClipPath.addRect(
+                0f, (height - reach).coerceAtLeast(0f), width.toFloat(), height.toFloat(),
+                Path.Direction.CW
+            )
+        }
+        if (showSides) {
+            positionClipPath.addRect(
+                0f, 0f, reach.coerceAtMost(width.toFloat()), height.toFloat(),
+                Path.Direction.CW
+            )
+            positionClipPath.addRect(
+                (width - reach).coerceAtLeast(0f), 0f, width.toFloat(), height.toFloat(),
+                Path.Direction.CW
+            )
+        }
+        canvas.clipPath(positionClipPath)
+    }
+
+    private fun drawGlowConfigured(canvas: Canvas) {
+        if (userIntensity == 0f) return
+        val base = effectiveGlowBaseColor() and 0x00FFFFFF
+        val alphas = buildGlowAlpha(currentGlowAlpha())
+        val stops = spreadStops()
+        val spreadPxH = (width * userSpread).coerceAtMost(width.toFloat())
+        val spreadPxV = (height * userSpread).coerceAtMost(height.toFloat())
+        val buildColors = { a: FloatArray -> IntArray(5) { colorWithAlpha(base, a[it]) } }
+        val reverseAlphas = FloatArray(5) { alphas[4 - it] }
+        val revStops = FloatArray(5) { 1f - stops[4 - it] }
+
+        if (showSides) {
+            glowPaint.shader = LinearGradient(
+                0f, 0f, spreadPxH, 0f,
+                buildColors(alphas), stops, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(0f, 0f, spreadPxH, height.toFloat(), glowPaint)
+
+            glowPaint.shader = LinearGradient(
+                width - spreadPxH, 0f, width.toFloat(), 0f,
+                buildColors(reverseAlphas), revStops, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(width - spreadPxH, 0f, width.toFloat(), height.toFloat(), glowPaint)
+        }
+
+        if (showTop) {
+            glowPaint.shader = LinearGradient(
+                0f, 0f, 0f, spreadPxV,
+                buildColors(alphas), stops, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(0f, 0f, width.toFloat(), spreadPxV, glowPaint)
+        }
+
+        if (showBottom) {
+            glowPaint.shader = LinearGradient(
+                0f, height - spreadPxV, 0f, height.toFloat(),
+                buildColors(reverseAlphas), revStops, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(0f, height - spreadPxV, width.toFloat(), height.toFloat(), glowPaint)
+        }
+        glowPaint.shader = null
     }
 
     private fun buildGlowAlpha(baseAlpha: Float): FloatArray {
@@ -346,6 +455,83 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         }
     }
 
+    private fun drawPerimeterEdges(canvas: Canvas, radius: Float) {
+        val halfStroke = edgePaint.strokeWidth / 2f
+        edgePaint.strokeCap = Paint.Cap.ROUND
+        edgePaint.strokeJoin = Paint.Join.ROUND
+
+        roundedRect.set(
+            halfStroke,
+            halfStroke,
+            width.toFloat() - halfStroke,
+            height.toFloat() - halfStroke
+        )
+        roundedPath.reset()
+        roundedPath.addRoundRect(
+            roundedRect,
+            radius.coerceAtLeast(0f),
+            radius.coerceAtLeast(0f),
+            Path.Direction.CW
+        )
+
+        when (animationEffect) {
+            EFFECT_BREATHING -> {
+                applyBreathingEffect()
+                canvas.drawPath(roundedPath, edgePaint)
+            }
+            EFFECT_WAVE -> drawWaveEffectRounded(canvas)
+            EFFECT_SPARKLE -> drawSparkleEffectRounded(canvas)
+            EFFECT_CHASE -> drawChaseEffectRounded(canvas)
+            EFFECT_COMET -> drawCometEffectRounded(canvas)
+            EFFECT_AURORA -> drawAuroraEffect(canvas)
+            else -> {
+                edgePaint.alpha = 255
+                edgePaint.maskFilter = null
+                canvas.drawPath(roundedPath, edgePaint)
+            }
+        }
+    }
+
+    private fun drawAuroraEffect(canvas: Canvas) {
+        val density = resources.displayMetrics.density
+        val baseStroke = (userStrokeWidth * density).coerceAtLeast(2f * density)
+        val phase = ((sin(effectProgress * 2.0 * PI).toFloat() + 1f) * 0.5f)
+        val fixedColor = effectiveGlowBaseColor()
+        val multiColor = auroraColorMode == AURORA_COLOR_MULTICOLOR
+
+        val shader = if (multiColor) {
+            val matrix = Matrix().apply {
+                postRotate(effectProgress * 360f, width / 2f, height / 2f)
+            }
+            SweepGradient(
+                width / 2f,
+                height / 2f,
+                AURORA_COLORS,
+                AURORA_STOPS,
+            ).also { it.setLocalMatrix(matrix) }
+        } else {
+            null
+        }
+
+        // Multi-pass bloom avoids low-resolution bitmap effects. Every pass is vector-rendered with
+        // anti-aliasing and dithering, giving a smooth HDR-like aurora edge on high-density panels.
+        val widths = floatArrayOf(8.0f, 6.0f, 4.4f, 3.1f, 2.1f, 1.35f, 1.0f)
+        val alphas = floatArrayOf(0.045f, 0.07f, 0.105f, 0.16f, 0.24f, 0.42f, 0.95f)
+        for (i in widths.indices) {
+            val auroraPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+                strokeWidth = baseStroke * widths[i] * (0.94f + phase * 0.12f)
+                alpha = (255f * alphas[i] * (0.82f + phase * 0.18f)).toInt()
+                    .coerceIn(0, 255)
+                color = fixedColor
+                this.shader = shader
+            }
+            canvas.drawPath(roundedPath, auroraPaint)
+        }
+    }
+
     private fun drawRoundedEdges(canvas: Canvas) {
         val halfStroke = edgePaint.strokeWidth / 2
         edgePaint.strokeCap = Paint.Cap.ROUND
@@ -374,6 +560,7 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
             EFFECT_SPARKLE -> drawSparkleEffectRounded(canvas)
             EFFECT_CHASE -> drawChaseEffectRounded(canvas)
             EFFECT_COMET -> drawCometEffectRounded(canvas)
+            EFFECT_AURORA -> drawAuroraEffect(canvas)
             else -> {
                 edgePaint.alpha = 255
                 edgePaint.maskFilter = null
@@ -729,6 +916,7 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
             EFFECT_SPARKLE -> 100L
             EFFECT_CHASE -> 2500L
             EFFECT_COMET -> 2000L
+            EFFECT_AURORA -> 4500L
             else -> 2000L
         }
 
@@ -782,7 +970,25 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         const val EFFECT_SPARKLE = "sparkle"
         const val EFFECT_CHASE = "chase"
         const val EFFECT_COMET = "comet"
-        private val MOVING_EFFECT = arrayOf(EFFECT_WAVE, EFFECT_SPARKLE, EFFECT_CHASE, EFFECT_COMET)
+        const val EFFECT_AURORA = "aurora"
+        const val AURORA_COLOR_FIXED = "fixed"
+        const val AURORA_COLOR_MULTICOLOR = "multicolor"
+        private val MOVING_EFFECT = arrayOf(
+            EFFECT_WAVE, EFFECT_SPARKLE, EFFECT_CHASE, EFFECT_COMET, EFFECT_AURORA
+        )
+        private val AURORA_COLORS = intArrayOf(
+            0xFF00F5FF.toInt(),
+            0xFF00A8FF.toInt(),
+            0xFF5257FF.toInt(),
+            0xFF9B5CFF.toInt(),
+            0xFFFF4FD8.toInt(),
+            0xFFFF6FB1.toInt(),
+            0xFF7BFFB2.toInt(),
+            0xFF00F5FF.toInt(),
+        )
+        private val AURORA_STOPS = floatArrayOf(
+            0f, 0.14f, 0.28f, 0.43f, 0.58f, 0.72f, 0.86f, 1f
+        )
         private val RAINBOW = intArrayOf(
             0xFFFF0000.toInt(), 0xFFFF7F00.toInt(), 0xFFFFFF00.toInt(),
             0xFF00FF00.toInt(), 0xFF0000FF.toInt(), 0xFF4B0082.toInt(),
