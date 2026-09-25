@@ -1,29 +1,14 @@
 /*
- * Copyright (C) 2019 Descendant
- * Copyright (C) 2022 PixelPlusUI
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * SPDX-FileCopyrightText: 2026 Evolution X
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package com.android.systemui.qs.tiles;
 
-import static android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE;
-import static android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC;
-import static android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL;
-
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.widget.Switch;
 
@@ -49,19 +34,23 @@ import com.android.systemui.util.settings.SystemSettings;
 
 import javax.inject.Inject;
 
-/** Quick settings tile: Auto brightness. */
-public class AutoBrightnessTile extends QSTileImpl<BooleanState> {
+/** Quick Settings tile for the Edge Lighting master switch. */
+public class EdgeLightTile extends QSTileImpl<BooleanState> {
 
-    public static final String TILE_SPEC = "autobrightness";
+    public static final String TILE_SPEC = "edge_light";
 
-    private static final Intent DISPLAY_SETTINGS =
-            new Intent("android.settings.DISPLAY_SETTINGS");
+    private static final Intent EDGE_LIGHT_SETTINGS =
+            new Intent("com.android.settings.EDGE_LIGHT_SETTINGS")
+                    .setPackage("com.android.settings")
+                    .addCategory(Intent.CATEGORY_DEFAULT);
 
-    private final Icon mIcon = ResourceIcon.get(R.drawable.ic_qs_autobrightness);
+    @Nullable
+    private Icon mIcon;
+
     private final UserSettingObserver mSetting;
 
     @Inject
-    public AutoBrightnessTile(
+    public EdgeLightTile(
             QSHost host,
             QsEventLogger uiEventLogger,
             @Background Looper backgroundLooper,
@@ -80,9 +69,8 @@ public class AutoBrightnessTile extends QSTileImpl<BooleanState> {
         mSetting = new UserSettingObserver(
                 systemSettings,
                 mHandler,
-                SCREEN_BRIGHTNESS_MODE,
-                userTracker.getUserId(),
-                SCREEN_BRIGHTNESS_MODE_MANUAL
+                Settings.System.EDGE_LIGHT_ENABLED,
+                userTracker.getUserId()
         ) {
             @Override
             protected void handleValueChanged(int value, boolean observedChange) {
@@ -97,26 +85,9 @@ public class AutoBrightnessTile extends QSTileImpl<BooleanState> {
     }
 
     @Override
-    public boolean isAvailable() {
-        return mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_automatic_brightness_available);
-    }
-
-    @Override
-    public Intent getLongClickIntent() {
-        return DISPLAY_SETTINGS;
-    }
-
-    @Override
     public void handleSetListening(boolean listening) {
         super.handleSetListening(listening);
         mSetting.setListening(listening);
-    }
-
-    @Override
-    protected void handleUserSwitch(int newUserId) {
-        mSetting.setUserId(newUserId);
-        refreshState();
     }
 
     @Override
@@ -126,33 +97,46 @@ public class AutoBrightnessTile extends QSTileImpl<BooleanState> {
     }
 
     @Override
-    protected void handleClick(@Nullable Expandable expandable) {
-        mSetting.setValue(mState.value
-                ? SCREEN_BRIGHTNESS_MODE_MANUAL
-                : SCREEN_BRIGHTNESS_MODE_AUTOMATIC);
+    protected void handleUserSwitch(int newUserId) {
+        mSetting.setUserId(newUserId);
         refreshState();
+    }
+
+    @Override
+    protected void handleClick(@Nullable Expandable expandable) {
+        mSetting.setValue(mState.value ? 0 : 1);
+        refreshState();
+    }
+
+    @Override
+    public Intent getLongClickIntent() {
+        return EDGE_LIGHT_SETTINGS;
+    }
+
+    @Override
+    public CharSequence getTileLabel() {
+        return mContext.getString(R.string.quick_settings_edge_light_label);
     }
 
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
         final int value = arg instanceof Integer ? (Integer) arg : mSetting.getValue();
-        final boolean enabled = value == SCREEN_BRIGHTNESS_MODE_AUTOMATIC;
+        final boolean enabled = value != 0;
 
+        if (mIcon == null) {
+            mIcon = maybeLoadResourceIcon(R.drawable.ic_qs_edge_light);
+        }
+
+        state.icon = mIcon;
         state.value = enabled;
         state.label = getTileLabel();
-        state.icon = mIcon;
         state.secondaryLabel = mContext.getString(enabled
-                ? R.string.quick_settings_autobrightness_on
-                : R.string.quick_settings_autobrightness_off);
+                ? R.string.quick_settings_state_on
+                : R.string.quick_settings_state_off);
         state.stateDescription = state.secondaryLabel;
         state.contentDescription = state.label + ", " + state.secondaryLabel;
         state.expandedAccessibilityClassName = Switch.class.getName();
         state.state = enabled ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
-    }
-
-    @Override
-    public CharSequence getTileLabel() {
-        return mContext.getString(R.string.quick_settings_autobrightness_label);
     }
 
     @Override
