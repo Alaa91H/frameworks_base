@@ -16,6 +16,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.ContentObserver;
+import android.net.NetworkInfo;
+import android.net.wifi.SupplicantState;
+import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.SystemClock;
@@ -26,8 +29,9 @@ import android.util.Slog;
  * Schedules optional automatic shutdown timers for Wi-Fi and Bluetooth.
  *
  * <p>Timeouts are stored in {@link Settings.Global} as milliseconds. A value of {@code 0}
- * disables automatic shutdown. Alarms are scheduled from the moment a radio becomes enabled,
- * or from the moment its timeout is changed while the radio is already enabled.</p>
+ * disables automatic shutdown. A timer runs only while the corresponding radio is enabled and
+ * idle/disconnected. Active or connecting Wi-Fi/Bluetooth sessions cancel the timer; a new timer
+ * starts when the radio becomes idle again.</p>
  */
 final class ConnectivityAutoOffController {
 
@@ -86,7 +90,9 @@ final class ConnectivityAutoOffController {
     void start() {
         final IntentFilter filter = new IntentFilter();
         filter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
+        filter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+        filter.addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED);
         mContext.registerReceiverForAllUsers(mStateReceiver, filter, null, mHandler);
 
         final IntentFilter alarmFilter = new IntentFilter();
@@ -116,18 +122,28 @@ final class ConnectivityAutoOffController {
                 final int state = intent.getIntExtra(
                         WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN);
                 if (state == WifiManager.WIFI_STATE_ENABLED) {
-                    scheduleWifiAlarm();
+                    updateWifiAlarm();
                 } else if (state == WifiManager.WIFI_STATE_DISABLED) {
                     cancelWifiAlarm();
+                }
+            } else if (WifiManager.NETWORK_STATE_CHANGED_ACTION.equals(action)) {
+                final NetworkInfo networkInfo = intent.getParcelableExtra(
+                        WifiManager.EXTRA_NETWORK_INFO, NetworkInfo.class);
+                if (networkInfo != null && networkInfo.isConnectedOrConnecting()) {
+                    cancelWifiAlarm();
+                } else {
+                    updateWifiAlarm();
                 }
             } else if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
                 final int state = intent.getIntExtra(
                         BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
                 if (state == BluetoothAdapter.STATE_ON) {
-                    scheduleBluetoothAlarm();
+                    updateBluetoothAlarm();
                 } else if (state == BluetoothAdapter.STATE_OFF) {
                     cancelBluetoothAlarm();
                 }
+            } else if (BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED.equals(action)) {
+                updateBluetoothAlarm();
             }
         }
     };
@@ -156,7 +172,8 @@ final class ConnectivityAutoOffController {
     };
 
     private void updateWifiAlarm() {
-        if (mWifiManager != null && mWifiManager.isWifiEnabled()) {
+        if (mWifiManager != null && mWifiManager.isWifiEnabled()
+                && !isWifiConnectedOrConnecting()) {
             scheduleWifiAlarm();
         } else {
             cancelWifiAlarm();
@@ -164,11 +181,46 @@ final class ConnectivityAutoOffController {
     }
 
     private void updateBluetoothAlarm() {
-        if (mBluetoothAdapter != null && mBluetoothAdapter.isEnabled()) {
+        if (mBluetoothAdapter != null && mBluetoothAdapter.isEnabled()
+                && !isBluetoothConnectedOrConnecting()) {
             scheduleBluetoothAlarm();
         } else {
             cancelBluetoothAlarm();
         }
+    }
+
+    private boolean isWifiConnectedOrConnecting() {
+        if (mWifiManager == null) {
+            return false;
+        }
+
+        final WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
+        if (wifiInfo == null) {
+            return false;
+        }
+
+        final SupplicantState state = wifiInfo.getSupplicantState();
+        switch (state) {
+            case ASSOCIATING:
+            case ASSOCIATED:
+            case AUTHENTICATING:
+            case FOUR_WAY_HANDSHAKE:
+            case GROUP_HANDSHAKE:
+            case COMPLETED:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isBluetoothConnectedOrConnecting() {
+        if (mBluetoothAdapter == null) {
+            return false;
+        }
+
+        final int connectionState = mBluetoothAdapter.getConnectionState();
+        return connectionState == BluetoothAdapter.STATE_CONNECTED
+                || connectionState == BluetoothAdapter.STATE_CONNECTING;
     }
 
     private void scheduleWifiAlarm() {
@@ -185,7 +237,7 @@ final class ConnectivityAutoOffController {
         cancelWifiAlarm();
         mWifiAlarmAt = SystemClock.elapsedRealtime() + timeout;
         mWifiAlarmTimeout = timeout;
-        mAlarmManager.setExactAndAllowWhileIdle(
+        mAlarmManager.setAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 mWifiAlarmAt,
                 mWifiAlarmIntent);
@@ -205,7 +257,7 @@ final class ConnectivityAutoOffController {
         cancelBluetoothAlarm();
         mBluetoothAlarmAt = SystemClock.elapsedRealtime() + timeout;
         mBluetoothAlarmTimeout = timeout;
-        mAlarmManager.setExactAndAllowWhileIdle(
+        mAlarmManager.setAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 mBluetoothAlarmAt,
                 mBluetoothAlarmIntent);
@@ -234,6 +286,9 @@ final class ConnectivityAutoOffController {
                 || getTimeout(WIFI_AUTO_OFF_TIMEOUT) <= TIMEOUT_DISABLED) {
             return;
         }
+        if (isWifiConnectedOrConnecting()) {
+            return;
+        }
         if (!mWifiManager.setWifiEnabled(false)) {
             Slog.w(TAG, "Failed to disable Wi-Fi after auto-off timeout");
         }
@@ -244,6 +299,9 @@ final class ConnectivityAutoOffController {
         mBluetoothAlarmTimeout = 0;
         if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()
                 || getTimeout(BLUETOOTH_AUTO_OFF_TIMEOUT) <= TIMEOUT_DISABLED) {
+            return;
+        }
+        if (isBluetoothConnectedOrConnecting()) {
             return;
         }
         if (!mBluetoothAdapter.disable()) {
