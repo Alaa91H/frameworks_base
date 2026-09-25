@@ -774,4 +774,7 @@
     <string name="feminine" msgid="1529155595310784757">"صيغة مخاطبة مؤنثة"</string>
     <string name="masculine" msgid="4653978041013996303">"صيغة مخاطبة مذكّرة"</string>
     <string name="system_update_settings_list_item_title" msgid="6618098383615432484">"تحديثات النظام"</string>
+
+    <!-- Arabic completeness pass -->
+    <string name="debug_hw_renderer">تعيين عارض GPU</string>
 </resources>
