@@ -30,6 +30,7 @@ import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -37,6 +38,7 @@ import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 /**
  * Unified device-props spoofing service.
@@ -63,12 +65,29 @@ public final class GamePropsSpoofService {
     // Settings keys (mirrors Settings.Secure constants used by the UI)
     // -------------------------------------------------------------------------
 
-    /** Comma-separated "pkg:profileId" pairs for the active per-app spoof map. */
+    /**
+     * Active per-app spoof map. Legacy builds stored comma-separated
+     * "pkg:profileId" pairs; current builds store a versioned JSON object.
+     */
     private static final String SETTING_PER_APPS         = "per_apps_device_spoof";
     /** Master enable flag for per-app spoofing (int, default 1). */
     private static final String SETTING_PER_APPS_ENABLED = "per_apps_device_spoof_enabled";
-    /** JSON array of custom user-defined profiles. */
+    /**
+     * User-defined profiles. Legacy builds stored a raw JSON array; current builds
+     * store a versioned JSON object containing a "profiles" array.
+     */
     private static final String SETTING_CUSTOM_PROFILES  = "custom_spoof_profiles";
+
+    private static final int PER_APP_CONFIG_VERSION = 2;
+    private static final int CUSTOM_PROFILES_VERSION = 2;
+
+    private static final Pattern PACKAGE_NAME_PATTERN =
+            Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
+    private static final Pattern PROFILE_ID_PATTERN =
+            Pattern.compile("[A-Za-z0-9._-]{1,64}");
+    private static final Pattern FINGERPRINT_PATTERN = Pattern.compile(
+            "^[^\\s/]+/[^\\s/]+/[^\\s:]+:[^\\s/]+/[^\\s/]+/[^\\s:]+:"
+                    + "[^\\s/]+/[^\\s]+$");
 
     // -------------------------------------------------------------------------
     // Singleton
@@ -320,7 +339,6 @@ public final class GamePropsSpoofService {
             return;
         }
 
-        // Read active map: "pkg1:profileId1,pkg2:profileId2,..."
         String spoofedApps;
         try {
             spoofedApps = Settings.Secure.getString(
@@ -332,15 +350,9 @@ public final class GamePropsSpoofService {
 
         if (TextUtils.isEmpty(spoofedApps)) return;
 
-        // Find this package's assigned profile ID
-        String profileId = null;
-        for (String entry : spoofedApps.split(",")) {
-            String[] parts = entry.split(":");
-            if (parts.length == 2 && packageName.equals(parts[0])) {
-                profileId = parts[1];
-                break;
-            }
-        }
+        // Accept both the current versioned JSON representation and the legacy
+        // comma-separated representation so OTA upgrades do not lose assignments.
+        String profileId = findAssignedProfile(spoofedApps, packageName);
         if (profileId == null) return;
 
         // Build combined profile map: built-ins + custom user profiles
@@ -361,8 +373,46 @@ public final class GamePropsSpoofService {
         }
     }
 
+    private String findAssignedProfile(String raw, String packageName) {
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) return null;
+
+        if (trimmed.startsWith("{")) {
+            try {
+                JSONObject root = new JSONObject(trimmed);
+                int version = root.optInt("version", 0);
+                JSONObject apps = root.optJSONObject("apps");
+                if (version != PER_APP_CONFIG_VERSION || apps == null) {
+                    Log.w(TAG, "Unsupported per-app spoof config version: " + version);
+                    return null;
+                }
+
+                String profileId = apps.optString(packageName, "").trim();
+                return isValidProfileId(profileId) ? profileId : null;
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to parse versioned per-app spoof config", e);
+                return null;
+            }
+        }
+
+        // Legacy format: "pkg1:profileId1,pkg2:profileId2,..."
+        for (String entry : trimmed.split(",")) {
+            String[] parts = entry.split(":", 2);
+            if (parts.length != 2) continue;
+
+            String pkg = parts[0].trim();
+            String profileId = parts[1].trim();
+            if (packageName.equals(pkg) && isValidPackageName(pkg)
+                    && isValidProfileId(profileId)) {
+                return profileId;
+            }
+        }
+        return null;
+    }
+
     /**
      * Reads custom profiles from Settings.Secure and merges them into {@code out}.
+     * Accepts both the legacy raw JSON array and the current versioned JSON object.
      * Any profile whose id collides with a built-in is skipped (built-ins win).
      */
     private void loadCustomProfiles(Context context, Map<String, Map<String, Object>> out) {
@@ -376,26 +426,85 @@ public final class GamePropsSpoofService {
         if (TextUtils.isEmpty(json)) return;
 
         try {
-            JSONArray arr = new JSONArray(json);
+            Object parsed = new JSONTokener(json.trim()).nextValue();
+            JSONArray arr;
+            if (parsed instanceof JSONArray) {
+                arr = (JSONArray) parsed;
+            } else if (parsed instanceof JSONObject) {
+                JSONObject root = (JSONObject) parsed;
+                int version = root.optInt("version", 0);
+                if (version != CUSTOM_PROFILES_VERSION) {
+                    Log.w(TAG, "Unsupported custom spoof profile version: " + version);
+                    return;
+                }
+                arr = root.optJSONArray("profiles");
+                if (arr == null) {
+                    Log.w(TAG, "Custom spoof profile config has no profiles array");
+                    return;
+                }
+            } else {
+                Log.w(TAG, "Unsupported custom spoof profile payload");
+                return;
+            }
+
             for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                String id = obj.getString("id");
-                if (out.containsKey(id)) continue; // built-in takes priority
+                JSONObject obj = arr.optJSONObject(i);
+                if (obj == null) continue;
+
+                String id = obj.optString("id", "").trim();
+                if (!isValidProfileId(id) || out.containsKey(id)) {
+                    if (mDebug && !TextUtils.isEmpty(id)) {
+                        Log.d(TAG, "Skipping invalid or colliding profile id: " + id);
+                    }
+                    continue;
+                }
+
+                String brand = obj.optString("brand", "").trim();
+                String manufacturer = obj.optString("manufacturer", "").trim();
+                String device = obj.optString("device", "").trim();
+                String model = obj.optString("model", "").trim();
+                String fp = obj.optString("fingerprint", "").trim();
+                String prod = obj.optString("product", "").trim();
+
+                if (TextUtils.isEmpty(brand) || TextUtils.isEmpty(manufacturer)
+                        || TextUtils.isEmpty(device) || TextUtils.isEmpty(model)) {
+                    Log.w(TAG, "Skipping incomplete custom spoof profile: " + id);
+                    continue;
+                }
+                if (!TextUtils.isEmpty(fp) && !isValidFingerprint(fp)) {
+                    Log.w(TAG, "Skipping custom spoof profile with invalid fingerprint: " + id);
+                    continue;
+                }
 
                 Map<String, Object> props = new HashMap<>();
-                props.put("BRAND",        obj.optString("brand",        ""));
-                props.put("MANUFACTURER", obj.optString("manufacturer", ""));
-                props.put("DEVICE",       obj.optString("device",       ""));
-                props.put("MODEL",        obj.optString("model",        ""));
-                String fp   = obj.optString("fingerprint", "");
-                String prod = obj.optString("product",     "");
-                if (!TextUtils.isEmpty(fp))   props.put("FINGERPRINT", fp);
-                if (!TextUtils.isEmpty(prod)) props.put("PRODUCT",     prod);
+                props.put("BRAND", brand);
+                props.put("MANUFACTURER", manufacturer);
+                props.put("DEVICE", device);
+                props.put("MODEL", model);
+                if (!TextUtils.isEmpty(fp)) props.put("FINGERPRINT", fp);
+                if (!TextUtils.isEmpty(prod)) props.put("PRODUCT", prod);
                 out.put(id, props);
             }
         } catch (Exception e) {
             Log.e(TAG, "Failed to parse custom spoof profiles", e);
         }
+    }
+
+    private static boolean isValidPackageName(String packageName) {
+        return !TextUtils.isEmpty(packageName)
+                && packageName.length() <= 255
+                && PACKAGE_NAME_PATTERN.matcher(packageName).matches();
+    }
+
+    private static boolean isValidProfileId(String profileId) {
+        return !TextUtils.isEmpty(profileId)
+                && PROFILE_ID_PATTERN.matcher(profileId).matches();
+    }
+
+    private static boolean isValidFingerprint(String fingerprint) {
+        return !TextUtils.isEmpty(fingerprint)
+                && fingerprint.length() <= 512
+                && FINGERPRINT_PATTERN.matcher(fingerprint).matches();
     }
 
     // -------------------------------------------------------------------------
