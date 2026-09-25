@@ -28,20 +28,28 @@ import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.res.R
 import com.android.systemui.shared.R as sharedR
+import com.android.systemui.tuner.TunerService
 import com.android.systemui.weather.WeatherImageView
 import com.android.systemui.weather.WeatherTextView
 import javax.inject.Inject
 
 class KeyguardWeatherViewSection @Inject constructor(
     private val context: Context,
-) : KeyguardSection() {
+    private val tunerService: TunerService,
+) : KeyguardSection(), TunerService.Tunable {
 
+    private var weatherContainerView: View? = null
     private var weatherImageView: WeatherImageView? = null
     private var weatherTextView: WeatherTextView? = null
+
+    private var horizontalOffsetDp = 0
+    private var verticalOffsetDp = 0
+    private var tunerRegistered = false
 
     override fun addViews(constraintLayout: ConstraintLayout) {
 
         val weatherContainer = constraintLayout.findViewById<ViewGroup?>(R.id.keyguard_weather)
+        weatherContainerView = weatherContainer
         
         if (weatherContainer != null) {
             weatherImageView = weatherContainer.findViewById(R.id.default_weather_image)
@@ -88,7 +96,47 @@ class KeyguardWeatherViewSection @Inject constructor(
     }
 
     override fun bindData(constraintLayout: ConstraintLayout) {
-        // Weather data binding handled by individual weather views
+        // Weather data binding is handled by the individual weather views.
+        if (!tunerRegistered) {
+            tunerService.addTunable(this, WEATHER_OFFSET_X_KEY, WEATHER_OFFSET_Y_KEY)
+            tunerRegistered = true
+        }
+        applyPositionOffsets()
+    }
+
+    override fun onTuningChanged(key: String?, newValue: String?) {
+        when (key) {
+            WEATHER_OFFSET_X_KEY -> {
+                horizontalOffsetDp =
+                    TunerService.parseInteger(newValue, 0).coerceIn(MIN_OFFSET_DP, MAX_OFFSET_DP)
+            }
+            WEATHER_OFFSET_Y_KEY -> {
+                verticalOffsetDp =
+                    TunerService.parseInteger(newValue, 0).coerceIn(MIN_OFFSET_DP, MAX_OFFSET_DP)
+            }
+        }
+        applyPositionOffsets()
+    }
+
+    private fun applyPositionOffsets() {
+        val density = context.resources.displayMetrics.density
+        val translationX = horizontalOffsetDp * density
+        val translationY = verticalOffsetDp * density
+
+        val container = weatherContainerView
+        if (container != null) {
+            container.translationX = translationX
+            container.translationY = translationY
+            weatherImageView?.translationX = 0f
+            weatherImageView?.translationY = 0f
+            weatherTextView?.translationX = 0f
+            weatherTextView?.translationY = 0f
+        } else {
+            weatherImageView?.translationX = translationX
+            weatherImageView?.translationY = translationY
+            weatherTextView?.translationX = translationX
+            weatherTextView?.translationY = translationY
+        }
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
@@ -161,6 +209,11 @@ class KeyguardWeatherViewSection @Inject constructor(
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
+        if (tunerRegistered) {
+            tunerService.removeTunable(this)
+            tunerRegistered = false
+        }
+
         constraintLayout.findViewById<ViewGroup?>(R.id.keyguard_weather)?.let { weatherContainer ->
             constraintLayout.removeView(weatherContainer)
         }
@@ -168,7 +221,15 @@ class KeyguardWeatherViewSection @Inject constructor(
         weatherImageView?.let { constraintLayout.removeView(it) }
         weatherTextView?.let { constraintLayout.removeView(it) }
         
+        weatherContainerView = null
         weatherImageView = null
         weatherTextView = null
+    }
+
+    companion object {
+        private const val WEATHER_OFFSET_X_KEY = "lockscreen_weather_offset_x"
+        private const val WEATHER_OFFSET_Y_KEY = "lockscreen_weather_offset_y"
+        private const val MIN_OFFSET_DP = -200
+        private const val MAX_OFFSET_DP = 200
     }
 }
