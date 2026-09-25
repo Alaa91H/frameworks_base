@@ -36,6 +36,8 @@ final class ConnectivityAutoOffController {
 
     private static final String TAG = "ConnectivityAutoOff";
     private static final long TIMEOUT_DISABLED = 0L;
+    private static final long TIMEOUT_MIN = 15_000L;
+    private static final long TIMEOUT_MAX = 8 * 60 * 60 * 1000L;
 
     private static final String ACTION_WIFI_AUTO_OFF =
             "com.android.server.action.WIFI_AUTO_OFF";
@@ -53,6 +55,11 @@ final class ConnectivityAutoOffController {
     private final BluetoothAdapter mBluetoothAdapter;
     private final PendingIntent mWifiAlarmIntent;
     private final PendingIntent mBluetoothAlarmIntent;
+
+    private long mWifiAlarmAt;
+    private long mBluetoothAlarmAt;
+    private long mWifiAlarmTimeout;
+    private long mBluetoothAlarmTimeout;
 
     ConnectivityAutoOffController(Context context, Handler handler) {
         mContext = context;
@@ -165,42 +172,64 @@ final class ConnectivityAutoOffController {
     }
 
     private void scheduleWifiAlarm() {
-        cancelWifiAlarm();
         final long timeout = getTimeout(WIFI_AUTO_OFF_TIMEOUT);
         if (timeout <= TIMEOUT_DISABLED || mAlarmManager == null) {
+            cancelWifiAlarm();
             return;
         }
+
+        if (mWifiAlarmAt != 0 && mWifiAlarmTimeout == timeout) {
+            return;
+        }
+
+        cancelWifiAlarm();
+        mWifiAlarmAt = SystemClock.elapsedRealtime() + timeout;
+        mWifiAlarmTimeout = timeout;
         mAlarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + timeout,
+                mWifiAlarmAt,
                 mWifiAlarmIntent);
     }
 
     private void scheduleBluetoothAlarm() {
-        cancelBluetoothAlarm();
         final long timeout = getTimeout(BLUETOOTH_AUTO_OFF_TIMEOUT);
         if (timeout <= TIMEOUT_DISABLED || mAlarmManager == null) {
+            cancelBluetoothAlarm();
             return;
         }
+
+        if (mBluetoothAlarmAt != 0 && mBluetoothAlarmTimeout == timeout) {
+            return;
+        }
+
+        cancelBluetoothAlarm();
+        mBluetoothAlarmAt = SystemClock.elapsedRealtime() + timeout;
+        mBluetoothAlarmTimeout = timeout;
         mAlarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + timeout,
+                mBluetoothAlarmAt,
                 mBluetoothAlarmIntent);
     }
 
     private void cancelWifiAlarm() {
-        if (mAlarmManager != null) {
+        if (mAlarmManager != null && mWifiAlarmAt != 0) {
             mAlarmManager.cancel(mWifiAlarmIntent);
         }
+        mWifiAlarmAt = 0;
+        mWifiAlarmTimeout = 0;
     }
 
     private void cancelBluetoothAlarm() {
-        if (mAlarmManager != null) {
+        if (mAlarmManager != null && mBluetoothAlarmAt != 0) {
             mAlarmManager.cancel(mBluetoothAlarmIntent);
         }
+        mBluetoothAlarmAt = 0;
+        mBluetoothAlarmTimeout = 0;
     }
 
     private void handleWifiAlarm() {
+        mWifiAlarmAt = 0;
+        mWifiAlarmTimeout = 0;
         if (mWifiManager == null || !mWifiManager.isWifiEnabled()
                 || getTimeout(WIFI_AUTO_OFF_TIMEOUT) <= TIMEOUT_DISABLED) {
             return;
@@ -211,6 +240,8 @@ final class ConnectivityAutoOffController {
     }
 
     private void handleBluetoothAlarm() {
+        mBluetoothAlarmAt = 0;
+        mBluetoothAlarmTimeout = 0;
         if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()
                 || getTimeout(BLUETOOTH_AUTO_OFF_TIMEOUT) <= TIMEOUT_DISABLED) {
             return;
@@ -221,6 +252,14 @@ final class ConnectivityAutoOffController {
     }
 
     private long getTimeout(String key) {
-        return Settings.Global.getLong(mResolver, key, TIMEOUT_DISABLED);
+        final long timeout = Settings.Global.getLong(mResolver, key, TIMEOUT_DISABLED);
+        if (timeout == TIMEOUT_DISABLED) {
+            return TIMEOUT_DISABLED;
+        }
+        if (timeout < TIMEOUT_MIN || timeout > TIMEOUT_MAX) {
+            Slog.w(TAG, "Ignoring invalid auto-off timeout for " + key + ": " + timeout);
+            return TIMEOUT_DISABLED;
+        }
+        return timeout;
     }
 }
