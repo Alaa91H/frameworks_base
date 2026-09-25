@@ -1893,4 +1893,10 @@
     <string name="ace_attribution_settings_button_accessibility_description" msgid="8426163772933746374">"زرّ الإعدادات"</string>
     <string name="ace_attribution_thumbs_up_button_accessibility_description" msgid="3561722934830934360">"زر إرسال الملاحظات \"يعجبني\""</string>
     <string name="ace_attribution_thumbs_down_button_accessibility_description" msgid="5471283747650437662">"زر إرسال الملاحظات \"لا يعجبني\""</string>
+
+    <!-- Arabic completeness pass -->
+    <string name="quick_settings_screensaver_label">شاشة التوقف</string>
+    <string name="zen_alarm_warning_indef">لن تسمع المنبّه التالي <xliff:g id="when" example="at 7:00 AM">%1$s</xliff:g> ما لم توقف هذا الإعداد قبل ذلك</string>
+    <string name="accessibility_smartspace_previous_page">الصفحة السابقة</string>
+    <string name="accessibility_smartspace_next_page">الصفحة التالية</string>
 </resources>
