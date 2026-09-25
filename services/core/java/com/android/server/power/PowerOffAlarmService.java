@@ -179,7 +179,7 @@ public class PowerOffAlarmService extends SystemService {
             Slog.e(TAG, "updateNotification: mNotification is null!");
             return;
         }
-        mNotificationManager.notify(NOTIFICATION_ID, mNotification);
+        // Power-off alarm remains active; suppress only its user-facing notification.
     }
 
     private void setupNotification() {
