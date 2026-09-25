@@ -23,10 +23,14 @@ import com.android.systemui.qs.tileimpl.QSTileImpl
 import com.android.systemui.qs.tiles.AmbientDisplayTile
 import com.android.systemui.qs.tiles.AODTile
 import com.android.systemui.qs.tiles.AutoBrightnessTile
+import com.android.systemui.qs.tiles.BluetoothAutoOffTile
 import com.android.systemui.qs.tiles.CPUInfoTile
 import com.android.systemui.qs.tiles.CaffeineTile
+import com.android.systemui.qs.tiles.ChargingControlTile
+import com.android.systemui.qs.tiles.ChargingScheduleTile
 import com.android.systemui.qs.tiles.CompassTile
 import com.android.systemui.qs.tiles.DataSwitchTile
+import com.android.systemui.qs.tiles.EdgeLightTile
 import com.android.systemui.qs.tiles.FPSInfoTile
 import com.android.systemui.qs.tiles.HeadsUpTile
 import com.android.systemui.qs.tiles.LocaleTile
@@ -37,6 +41,7 @@ import com.android.systemui.qs.tiles.ProfilesTile
 import com.android.systemui.qs.tiles.ReadingModeTile
 import com.android.systemui.qs.tiles.RefreshRateTile
 import com.android.systemui.qs.tiles.ScreenshotTile
+import com.android.systemui.qs.tiles.ScreenTimeoutTile
 import com.android.systemui.qs.tiles.SoundTile
 import com.android.systemui.qs.tiles.SyncTile
 import com.android.systemui.qs.tiles.UsbTetherTile
@@ -44,6 +49,7 @@ import com.android.systemui.qs.tiles.VPNTetheringTile
 import com.android.systemui.qs.tiles.VolumeTile
 import com.android.systemui.qs.tiles.VpnTile
 import com.android.systemui.qs.tiles.WeatherTile
+import com.android.systemui.qs.tiles.WifiAutoOffTile
 import com.android.systemui.qs.tiles.base.shared.model.QSTileConfig
 import com.android.systemui.qs.tiles.base.shared.model.QSTileUIConfig
 import com.android.systemui.res.R
@@ -81,11 +87,42 @@ interface LineageModule {
     @StringKey(CPUInfoTile.TILE_SPEC)
     fun bindCPUInfoTile(cpuInfoTile: CPUInfoTile): QSTileImpl<*>
 
+    /** Inject BluetoothAutoOffTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(BluetoothAutoOffTile.TILE_SPEC)
+    fun bindBluetoothAutoOffTile(bluetoothAutoOffTile: BluetoothAutoOffTile): QSTileImpl<*>
+
+    /** Inject WifiAutoOffTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(WifiAutoOffTile.TILE_SPEC)
+    fun bindWifiAutoOffTile(wifiAutoOffTile: WifiAutoOffTile): QSTileImpl<*>
+
     /** Inject CaffeineTile into tileMap in QSModule */
     @Binds
     @IntoMap
     @StringKey(CaffeineTile.TILE_SPEC)
     fun bindCaffeineTile(caffeineTile: CaffeineTile): QSTileImpl<*>
+
+    /** Inject ChargingControlTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(ChargingControlTile.TILE_SPEC)
+    fun bindChargingControlTile(chargingControlTile: ChargingControlTile): QSTileImpl<*>
+
+    /** Inject ChargingScheduleTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(ChargingScheduleTile.TILE_SPEC)
+    fun bindChargingScheduleTile(chargingScheduleTile: ChargingScheduleTile): QSTileImpl<*>
+
+    /** Inject EdgeLightTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(EdgeLightTile.TILE_SPEC)
+    fun bindEdgeLightTile(edgeLightTile: EdgeLightTile): QSTileImpl<*>
+
 
     /** Inject CompassTile into tileMap in QSModule */
     @Binds
@@ -158,6 +195,12 @@ interface LineageModule {
     @IntoMap
     @StringKey(ScreenshotTile.TILE_SPEC)
     fun bindScreenshotTile(screenshotTile: ScreenshotTile): QSTileImpl<*>
+
+    /** Inject ScreenTimeoutTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(ScreenTimeoutTile.TILE_SPEC)
+    fun bindScreenTimeoutTile(screenTimeoutTile: ScreenTimeoutTile): QSTileImpl<*>
 
     /** Inject SmartPixelTile into tileMap in QSModule */
     @Binds
@@ -279,6 +322,81 @@ interface LineageModule {
 
         @Provides
         @IntoMap
+        @StringKey(BluetoothAutoOffTile.TILE_SPEC)
+        fun provideBluetoothAutoOffTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(BluetoothAutoOffTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_qs_bluetooth_auto_off,
+                        labelRes = R.string.quick_settings_bluetooth_auto_off_label
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.CONNECTIVITY,
+            )
+
+        @Provides
+        @IntoMap
+        @StringKey(WifiAutoOffTile.TILE_SPEC)
+        fun provideWifiAutoOffTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(WifiAutoOffTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_qs_wifi_auto_off,
+                        labelRes = R.string.quick_settings_wifi_auto_off_label
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.CONNECTIVITY,
+            )
+
+        @Provides
+        @IntoMap
+        @StringKey(ChargingControlTile.TILE_SPEC)
+        fun provideChargingControlTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(ChargingControlTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_qs_charging_control,
+                        labelRes = R.string.quick_settings_charging_control_label
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.UTILITIES,
+            )
+
+        @Provides
+        @IntoMap
+        @StringKey(ChargingScheduleTile.TILE_SPEC)
+        fun provideChargingScheduleTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(ChargingScheduleTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_qs_charging_schedule,
+                        labelRes = R.string.quick_settings_charging_schedule_label
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.UTILITIES,
+            )
+
+        @Provides
+        @IntoMap
+        @StringKey(EdgeLightTile.TILE_SPEC)
+        fun provideEdgeLightTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(EdgeLightTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_qs_edge_light,
+                        labelRes = R.string.quick_settings_edge_light_label
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.DISPLAY,
+            )
+
+        @Provides
+        @IntoMap
         @StringKey(HEADS_UP_TILE_SPEC)
         fun provideHeadsUpTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
             QSTileConfig(
@@ -347,6 +465,21 @@ interface LineageModule {
                     QSTileUIConfig.Resource(
                         iconRes = R.drawable.ic_qs_reader,
                         labelRes = R.string.quick_settings_reading_mode
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.DISPLAY,
+            )
+
+        @Provides
+        @IntoMap
+        @StringKey(ScreenTimeoutTile.TILE_SPEC)
+        fun provideScreenTimeoutTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(ScreenTimeoutTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_qs_screen_timeout,
+                        labelRes = R.string.quick_settings_screen_timeout_label
                     ),
                 instanceId = uiEventLogger.getNewInstanceId(),
                 category = TileCategory.DISPLAY,
