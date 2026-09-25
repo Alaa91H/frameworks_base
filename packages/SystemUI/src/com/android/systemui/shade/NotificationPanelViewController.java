@@ -495,7 +495,11 @@ public final class NotificationPanelViewController implements
                         // Once the animation for the alpha has finished (NPV is visible again),
                         // dismiss
                         // the mirror
-                        postToView(() -> mIsBrightnessMirrorShowing.setValue(false));
+                        postToView(() -> {
+                            if (!mBrightnessMirrorShowingRepository.isShowing().getValue()) {
+                                mIsBrightnessMirrorShowing.setValue(false);
+                            }
+                        });
                     }).setCustomInterpolator(
                     mPanelAlphaAnimator.getProperty(), Interpolators.ALPHA_IN);
 
@@ -556,6 +560,11 @@ public final class NotificationPanelViewController implements
     private float mShadeHeaderExpansion;
     private Drawable mCurrentBackground;
     private StatusBarHeaderMachine mStatusBarHeaderMachine;
+    private boolean mHeaderImageUpdatePending;
+    private final Runnable mUpdateHeaderImageRunnable = () -> {
+        mHeaderImageUpdatePending = false;
+        updateHeaderImage();
+    };
 
     private final NPVCDownEventState.Buffer mLastDownEvents;
     private final KeyguardClockInteractor mKeyguardClockInteractor;
@@ -2019,7 +2028,7 @@ public final class NotificationPanelViewController implements
         }
 
         if (mHeaderImageEnabled) {
-            mView.post(() -> updateHeaderImage());
+            scheduleHeaderImageUpdate();
         }
 
         if (DEBUG_DRAWABLE) {
@@ -3629,7 +3638,7 @@ public final class NotificationPanelViewController implements
         public void onConfigChanged(Configuration newConfig) {
             updateResources();
             if (mHeaderImageEnabled) {
-                mView.post(() -> updateHeaderImage());
+                scheduleHeaderImageUpdate();
             }
         }
 
@@ -3811,6 +3820,8 @@ public final class NotificationPanelViewController implements
             mStatusBarHeaderMachine.removeObserver(this);
             mTunerService.removeTunable(this);
             mFalsingManager.removeTapListener(mFalsingTapListener);
+            mView.removeCallbacks(mUpdateHeaderImageRunnable);
+            mHeaderImageUpdatePending = false;
         }
 
         @Override
@@ -3833,18 +3844,18 @@ public final class NotificationPanelViewController implements
                 case STATUS_BAR_CUSTOM_HEADER:
                     mHeaderImageEnabled =
                             TunerService.parseIntegerSwitch(newValue, false);
-                    mView.post(() -> updateHeaderImage());
+                    scheduleHeaderImageUpdate();
                     break;
                 case STATUS_BAR_CUSTOM_HEADER_HEIGHT:
                     mHeaderImageHeight =
                             TunerService.parseInteger(newValue, 142);
                     mBottomFadeHeight = (int) Math.round(mHeaderImageHeight * 0.555);
-                    mView.post(() -> updateHeaderImage());
+                    scheduleHeaderImageUpdate();
                     break;
                 case STATUS_BAR_CUSTOM_HEADER_SHADOW:
                     mHeaderImageShadow =
                             TunerService.parseInteger(newValue, 0);
-                    mView.post(() -> updateHeaderImage());
+                    scheduleHeaderImageUpdate();
                     break;
                 default:
                     break;
@@ -3890,7 +3901,7 @@ public final class NotificationPanelViewController implements
             updateExpandedHeight(getExpandedHeight());
             updateHeader();
             if (mHeaderImageEnabled) {
-                mView.post(() -> updateHeaderImage());
+                scheduleHeaderImageUpdate();
             }
 
             // If we are running a size change animation, the animation takes care of the height
@@ -4547,6 +4558,14 @@ public final class NotificationPanelViewController implements
         updateHeaderImage();
     }
 
+    private void scheduleHeaderImageUpdate() {
+        if (mHeaderImageUpdatePending) {
+            return;
+        }
+        mHeaderImageUpdatePending = true;
+        mView.postOnAnimation(mUpdateHeaderImageRunnable);
+    }
+
     private void updateHeaderImage() {
         Configuration config = mView.getResources().getConfiguration();
         float shadeHeaderExpansion = mShadeHeaderController.getShadeExpandedFraction();
@@ -4605,7 +4624,7 @@ public final class NotificationPanelViewController implements
             return;
         }
 
-        drawable.setVisible(true, true);
+        drawable.setVisible(true, false);
         if (drawable instanceof Animatable anim && !anim.isRunning()) {
             anim.start();
         }
