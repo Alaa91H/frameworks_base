@@ -26,6 +26,7 @@ import androidx.constraintlayout.widget.ConstraintSet
 import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardClockViewModel
 import com.android.systemui.res.R
+import com.android.systemui.tuner.TunerService
 import javax.inject.Inject
 import com.android.systemui.lockscreen.LockScreenWidgets
 import com.android.systemui.shared.R as sharedR
@@ -36,9 +37,13 @@ class KeyguardWidgetViewSection
 constructor(
     private val context: Context,
     private val keyguardClockViewModel: KeyguardClockViewModel,
-) : KeyguardSection() {
+    private val tunerService: TunerService,
+) : KeyguardSection(), TunerService.Tunable {
 
     private var widgetView: LockScreenWidgets? = null
+    private var horizontalOffsetDp = 0
+    private var verticalOffsetDp = 0
+    private var tunerRegistered = false
     private val TAG = "KeyguardWidgetViewSection"
 
     private fun createWidgetView(): LockScreenWidgets? {
@@ -116,6 +121,12 @@ constructor(
 
     override fun bindData(constraintLayout: ConstraintLayout) {
         Log.d(TAG, "bindData called")
+        if (!tunerRegistered) {
+            tunerService.addTunable(this, WIDGET_OFFSET_X_KEY, WIDGET_OFFSET_Y_KEY)
+            tunerRegistered = true
+        }
+        applyPositionOffsets()
+
         // Ensure the widget view is properly initialized and visible
         widgetView?.let { view ->
             if (view.visibility != View.VISIBLE) {
@@ -130,6 +141,26 @@ constructor(
                 updatePostLayout(constraintLayout)
             }
         }
+    }
+
+    override fun onTuningChanged(key: String?, newValue: String?) {
+        when (key) {
+            WIDGET_OFFSET_X_KEY -> {
+                horizontalOffsetDp =
+                    TunerService.parseInteger(newValue, 0).coerceIn(MIN_OFFSET_DP, MAX_OFFSET_DP)
+            }
+            WIDGET_OFFSET_Y_KEY -> {
+                verticalOffsetDp =
+                    TunerService.parseInteger(newValue, 0).coerceIn(MIN_OFFSET_DP, MAX_OFFSET_DP)
+            }
+        }
+        applyPositionOffsets()
+    }
+
+    private fun applyPositionOffsets() {
+        val density = context.resources.displayMetrics.density
+        widgetView?.translationX = horizontalOffsetDp * density
+        widgetView?.translationY = verticalOffsetDp * density
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
@@ -172,6 +203,10 @@ constructor(
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
         Log.d(TAG, "removeViews called")
+        if (tunerRegistered) {
+            tunerService.removeTunable(this)
+            tunerRegistered = false
+        }
         widgetView?.let { view ->
             keyguardClockViewModel.burnInLayer?.apply {
                 removeView(view)
@@ -185,5 +220,12 @@ constructor(
             }
         }
         widgetView = null
+    }
+
+    companion object {
+        private const val WIDGET_OFFSET_X_KEY = "lockscreen_widgets_offset_x"
+        private const val WIDGET_OFFSET_Y_KEY = "lockscreen_widgets_offset_y"
+        private const val MIN_OFFSET_DP = -200
+        private const val MAX_OFFSET_DP = 200
     }
 }
