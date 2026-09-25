@@ -1,0 +1,37 @@
+name: PowerShare service recovery validation
+
+on:
+  pull_request:
+    branches:
+      - cnb
+      - "fix/powershare-*"
+    paths:
+      - "packages/SystemUI/src/com/android/systemui/qs/tiles/PowerShareTile.java"
+      - "packages/SystemUI/multivalentTests/src/com/android/systemui/qs/tiles/PowerShareTileTest.java"
+      - "tools/validate_powershare.py"
+      - ".github/workflows/powershare-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: PowerShare recovery invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Validate checker syntax
+        run: python3 -m py_compile tools/validate_powershare.py
+
+      - name: Validate PowerShare recovery
+        run: python3 tools/validate_powershare.py
+
+      - name: Check patch whitespace
+        run: git diff --check HEAD^ HEAD
