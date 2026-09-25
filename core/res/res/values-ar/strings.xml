@@ -2722,4 +2722,7 @@
     <string name="do_not_disturb_sync_notification_channel_name" msgid="8652220979613037381">"مزامنة ميزة \"عدم الإزعاج\""</string>
     <string name="do_not_disturb_sync_notification_title" msgid="6732475150089465528">"عدم الإزعاج"</string>
     <string name="do_not_disturb_sync_notification_content" msgid="2755604717509797896">"تمّت المزامنة من جهازك المجاور"</string>
+
+    <!-- Arabic completeness pass -->
+    <string name="vcn_management_service">خدمة إدارة VCN</string>
 </resources>
