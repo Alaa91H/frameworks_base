@@ -62,6 +62,24 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
             invalidate()
         }
 
+    var showTop: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    var showSides: Boolean = true
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    var showBottom: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
+
     var edgeStyle: String = STYLE_DEFAULT
         set(value) {
             field = value
@@ -79,6 +97,12 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
+
+    private val auroraPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+
+    private val selectionClipPath = Path()
 
     private val totalPulseDuration =
         resources.getInteger(R.integer.doze_pulse_duration_visible).toLong()
@@ -105,6 +129,7 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
     private var pathLength: Float = 0f
 
     private var useRainbowGradient = false
+    private var solidPaintColor: Int = Color.WHITE
 
     private var glowBaseColor: Int = Color.WHITE
 
@@ -113,18 +138,31 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         set(value) { isVisible = value }
 
     var paintColor: Int
-        get() = edgePaint.color
+        get() = solidPaintColor
         set(value) {
-            if (value != COLOR_RAINBOW) {
-                useRainbowGradient = false
+            solidPaintColor = value
+            if (!useRainbowGradient) {
                 edgePaint.shader = null
                 edgePaint.color = value
                 edgePaint.alpha = 255
                 glowBaseColor = resolveGlowBase(value)
-            } else {
-                useRainbowGradient = true
+            }
+            invalidate()
+        }
+
+    var rainbowEnabled: Boolean
+        get() = useRainbowGradient
+        set(value) {
+            if (useRainbowGradient == value) return
+            useRainbowGradient = value
+            if (value) {
                 glowBaseColor = RAINBOW[0]
                 updateRainbowGradient()
+            } else {
+                edgePaint.shader = null
+                edgePaint.color = solidPaintColor
+                edgePaint.alpha = 255
+                glowBaseColor = resolveGlowBase(solidPaintColor)
             }
             invalidate()
         }
@@ -227,17 +265,63 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if (!showTop && !showSides && !showBottom) return
 
-        when (edgeStyle) {
-            STYLE_ROUNDED -> {
+        if (animationEffect != EFFECT_BREATHING) {
+            edgePaint.strokeWidth = userStrokeWidth * resources.displayMetrics.density
+        }
+
+        val save = canvas.save()
+        clipToSelectedRegions(canvas)
+
+        if (animationEffect == EFFECT_AURORA) {
+            drawAuroraEffect(canvas)
+        } else {
+            // The legacy default style remains left/right only with the default region settings.
+            // As soon as top or bottom is enabled we render a zero-radius frame and clip it to the
+            // requested regions, so every animation effect works consistently on every edge.
+            val framePath = edgeStyle == STYLE_ROUNDED || showTop || showBottom
+            if (framePath) {
                 drawRoundedEdges(canvas)
                 drawGlowRounded(canvas)
-            }
-            else -> {
+            } else {
                 drawDefaultEdges(canvas)
                 drawGlowDefault(canvas)
             }
         }
+
+        canvas.restoreToCount(save)
+    }
+
+    private fun clipToSelectedRegions(canvas: Canvas) {
+        selectionClipPath.reset()
+
+        val strokeBand = edgePaint.strokeWidth * 8f
+        val sideBand = maxOf(width * maxOf(userSpread, 0.10f), strokeBand)
+            .coerceAtMost(width.toFloat())
+        val horizontalBand = maxOf(height * maxOf(userSpread, 0.08f), strokeBand)
+            .coerceAtMost(height.toFloat())
+
+        if (showTop) {
+            selectionClipPath.addRect(
+                0f, 0f, width.toFloat(), horizontalBand, Path.Direction.CW
+            )
+        }
+        if (showSides) {
+            selectionClipPath.addRect(
+                0f, 0f, sideBand, height.toFloat(), Path.Direction.CW
+            )
+            selectionClipPath.addRect(
+                width - sideBand, 0f, width.toFloat(), height.toFloat(), Path.Direction.CW
+            )
+        }
+        if (showBottom) {
+            selectionClipPath.addRect(
+                0f, height - horizontalBand, width.toFloat(), height.toFloat(),
+                Path.Direction.CW
+            )
+        }
+        canvas.clipPath(selectionClipPath)
     }
 
     private fun buildGlowAlpha(baseAlpha: Float): FloatArray {
@@ -358,10 +442,11 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         )
 
         roundedPath.reset()
+        val radius = if (edgeStyle == STYLE_ROUNDED) cornerRadius else 0f
         roundedPath.addRoundRect(
             roundedRect,
-            cornerRadius,
-            cornerRadius,
+            radius,
+            radius,
             Path.Direction.CW
         )
 
@@ -655,6 +740,150 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         canvas.drawPath(cometPath, cometPaint)
     }
 
+    private fun drawAuroraEffect(canvas: Canvas) {
+        val density = resources.displayMetrics.density
+        val baseStroke = userStrokeWidth * density
+        val strength = 0.55f + 0.45f * userIntensity
+        val sideDepth = maxOf(width * (0.12f + userSpread * 0.30f), baseStroke * 10f)
+            .coerceAtMost(width * 0.55f)
+        val verticalDepth = maxOf(height * (0.08f + userSpread * 0.22f), baseStroke * 10f)
+            .coerceAtMost(height * 0.35f)
+
+        if (showSides) {
+            drawAuroraVertical(canvas, true, sideDepth, strength)
+            drawAuroraVertical(canvas, false, sideDepth, strength)
+        }
+        if (showTop) {
+            drawAuroraHorizontal(canvas, true, verticalDepth, strength)
+        }
+        if (showBottom) {
+            drawAuroraHorizontal(canvas, false, verticalDepth, strength)
+        }
+
+        // A crisp luminous rim anchors the soft curtains to the selected physical edges.
+        edgePaint.alpha = 235
+        edgePaint.strokeWidth = baseStroke
+        edgePaint.strokeCap = if (edgeStyle == STYLE_ROUNDED) Paint.Cap.ROUND else Paint.Cap.BUTT
+        edgePaint.maskFilter = null
+
+        val halfStroke = edgePaint.strokeWidth / 2f
+        roundedRect.set(
+            halfStroke,
+            halfStroke,
+            width.toFloat() - halfStroke,
+            height.toFloat() - halfStroke
+        )
+        roundedPath.reset()
+        val radius = if (edgeStyle == STYLE_ROUNDED) cornerRadius else 0f
+        roundedPath.addRoundRect(roundedRect, radius, radius, Path.Direction.CW)
+        canvas.drawPath(roundedPath, edgePaint)
+    }
+
+    private fun drawAuroraVertical(
+        canvas: Canvas,
+        left: Boolean,
+        depth: Float,
+        strength: Float
+    ) {
+        val segments = AURORA_SEGMENTS
+        val segmentHeight = height.toFloat() / segments
+        for (i in 0 until segments) {
+            val t = (i + 0.5f) / segments
+            val phase = effectProgress * 2f * PI.toFloat()
+            val wave = (0.72f +
+                0.28f * sin(phase + t * 5.5f * PI.toFloat())).coerceIn(0.25f, 1f)
+            val color = auroraColorAt(t, effectProgress)
+            val outer = colorWithAlpha(color, 0.72f * strength * wave)
+            val mid = colorWithAlpha(color, 0.30f * strength * wave)
+            val clear = colorWithAlpha(color, 0f)
+
+            val shader = if (left) {
+                LinearGradient(
+                    0f, 0f, depth, 0f,
+                    intArrayOf(outer, mid, clear),
+                    floatArrayOf(0f, 0.32f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            } else {
+                LinearGradient(
+                    width.toFloat(), 0f, width - depth, 0f,
+                    intArrayOf(outer, mid, clear),
+                    floatArrayOf(0f, 0.32f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            auroraPaint.shader = shader
+
+            val y0 = i * segmentHeight - 1f
+            val y1 = (i + 1) * segmentHeight + 1f
+            if (left) {
+                canvas.drawRect(0f, y0, depth, y1, auroraPaint)
+            } else {
+                canvas.drawRect(width - depth, y0, width.toFloat(), y1, auroraPaint)
+            }
+        }
+        auroraPaint.shader = null
+    }
+
+    private fun drawAuroraHorizontal(
+        canvas: Canvas,
+        top: Boolean,
+        depth: Float,
+        strength: Float
+    ) {
+        val segments = AURORA_SEGMENTS
+        val segmentWidth = width.toFloat() / segments
+        for (i in 0 until segments) {
+            val t = (i + 0.5f) / segments
+            val phase = effectProgress * 2f * PI.toFloat()
+            val wave = (0.72f +
+                0.28f * sin(phase * 0.9f + t * 5.0f * PI.toFloat())).coerceIn(0.25f, 1f)
+            val color = auroraColorAt(t, effectProgress + 0.17f)
+            val outer = colorWithAlpha(color, 0.72f * strength * wave)
+            val mid = colorWithAlpha(color, 0.30f * strength * wave)
+            val clear = colorWithAlpha(color, 0f)
+
+            val shader = if (top) {
+                LinearGradient(
+                    0f, 0f, 0f, depth,
+                    intArrayOf(outer, mid, clear),
+                    floatArrayOf(0f, 0.32f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            } else {
+                LinearGradient(
+                    0f, height.toFloat(), 0f, height - depth,
+                    intArrayOf(outer, mid, clear),
+                    floatArrayOf(0f, 0.32f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            auroraPaint.shader = shader
+
+            val x0 = i * segmentWidth - 1f
+            val x1 = (i + 1) * segmentWidth + 1f
+            if (top) {
+                canvas.drawRect(x0, 0f, x1, depth, auroraPaint)
+            } else {
+                canvas.drawRect(x0, height - depth, x1, height.toFloat(), auroraPaint)
+            }
+        }
+        auroraPaint.shader = null
+    }
+
+    private fun auroraColorAt(position: Float, phase: Float): Int {
+        if (!useRainbowGradient) {
+            return resolveGlowBase(edgePaint.color)
+        }
+
+        val hue = ((position * 250f) + (phase * 170f)) % 360f
+        val saturation = 0.72f + 0.18f * sin((position + phase) * 2f * PI.toFloat())
+        return Color.HSVToColor(
+            255,
+            floatArrayOf(hue, saturation.coerceIn(0.55f, 0.95f), 1f)
+        )
+    }
+
     private fun updateRainbowGradient() {
         if (width == 0 || height == 0) {
             post { _updateRainbowGradient() }
@@ -729,6 +958,7 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
             EFFECT_SPARKLE -> 100L
             EFFECT_CHASE -> 2500L
             EFFECT_COMET -> 2000L
+            EFFECT_AURORA -> 4200L
             else -> 2000L
         }
 
@@ -782,7 +1012,11 @@ class EdgeLightView(context: Context) : FrameLayout(context) {
         const val EFFECT_SPARKLE = "sparkle"
         const val EFFECT_CHASE = "chase"
         const val EFFECT_COMET = "comet"
-        private val MOVING_EFFECT = arrayOf(EFFECT_WAVE, EFFECT_SPARKLE, EFFECT_CHASE, EFFECT_COMET)
+        const val EFFECT_AURORA = "aurora"
+        private const val AURORA_SEGMENTS = 56
+        private val MOVING_EFFECT = arrayOf(
+            EFFECT_WAVE, EFFECT_SPARKLE, EFFECT_CHASE, EFFECT_COMET, EFFECT_AURORA
+        )
         private val RAINBOW = intArrayOf(
             0xFFFF0000.toInt(), 0xFFFF7F00.toInt(), 0xFFFFFF00.toInt(),
             0xFF00FF00.toInt(), 0xFF0000FF.toInt(), 0xFF4B0082.toInt(),
