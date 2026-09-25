@@ -68,6 +68,7 @@ public class ClipboardListener implements
             Set.of(SHELL_PACKAGE, SYSTEMUI_PACKAGE);
     public static final String EXTRA_SUPPRESS_OVERLAY =
             "com.android.systemui.SUPPRESS_CLIPBOARD_OVERLAY";
+    private static final String SETTING_HIDE_CLIPBOARD_OVERLAY = "hide_clipboard_overlay";
 
     private final Context mContext;
     private final Provider<ClipboardOverlayController> mOverlayProvider;
@@ -131,7 +132,23 @@ public class ClipboardListener implements
 
     @Override
     public void onPrimaryClipChanged() {
+        if (Settings.Secure.getIntForUser(
+                mContext.getContentResolver(),
+                Settings.Secure.SHOW_CLIPBOARD_OVERLAY,
+                1,
+                UserHandle.USER_CURRENT) == 0) {
+            return;
+        }
         if (!mClipboardManagerForUser.hasPrimaryClip()) {
+            return;
+        }
+
+        if (Settings.Secure.getIntForUser(
+                mContext.getContentResolver(),
+                SETTING_HIDE_CLIPBOARD_OVERLAY,
+                0,
+                mUserTracker.getUserId()) != 0) {
+            Log.i(TAG, "Clipboard overlay disabled by user setting.");
             return;
         }
 
