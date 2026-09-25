@@ -38,6 +38,7 @@ import com.android.server.LocalServices;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -121,7 +122,13 @@ final class BatterySaverCustomActions extends ContentObserver {
         mScreenTimeoutObserver = new ContentObserver(handler) {
             @Override
             public void onChange(boolean selfChange) {
-                handleScreenTimeoutChanged();
+                handleScreenTimeoutChanged(ActivityManager.getCurrentUser());
+            }
+
+            @Override
+            public void onChange(boolean selfChange, Collection<android.net.Uri> uris,
+                    int flags, UserHandle user) {
+                handleScreenTimeoutChanged(user.getIdentifier());
             }
         };
     }
@@ -592,7 +599,7 @@ final class BatterySaverCustomActions extends ContentObserver {
                 mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
     }
 
-    private void handleScreenTimeoutChanged() {
+    private void handleScreenTimeoutChanged(int changedUserId) {
         if (!mFullBatterySaverEnabled) {
             return;
         }
@@ -602,19 +609,24 @@ final class BatterySaverCustomActions extends ContentObserver {
             return;
         }
 
-        final int userId = ActivityManager.getCurrentUser();
+        final int userId = changedUserId >= 0
+                ? changedUserId : ActivityManager.getCurrentUser();
         final long currentTimeout = Settings.System.getLongForUser(
                 mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
         if (currentTimeout == timeoutMs) {
             return;
         }
 
-        // Preserve changes made while Battery Saver is active so they become the normal
-        // timeout after Battery Saver exits, then keep the temporary saver timeout applied.
+        // Preserve the normal timeout selected by the user while Battery Saver is active.
+        // Background users keep their new normal value untouched; if/when they become active,
+        // ACTION_USER_SWITCHED applies the temporary saver override for that user.
         mPreviousScreenTimeouts.put(userId, currentTimeout);
         persistScreenTimeoutBackups();
-        Settings.System.putLongForUser(
-                mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
+
+        if (userId == ActivityManager.getCurrentUser()) {
+            Settings.System.putLongForUser(
+                    mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
+        }
     }
 
     private void restoreScreenTimeout() {
