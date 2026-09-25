@@ -370,6 +370,13 @@ public class BatterySaverPolicy extends ContentObserver implements
     public void onChange(boolean selfChange, Uri uri) {
         if (uri != null && isUserBatterySaverSetting(uri)) {
             synchronized (mLock) {
+                // These user-facing overrides are full-saver-only. Avoid rebuilding the
+                // effective adaptive/off policy and notifying listeners for a setting that cannot
+                // affect it. Entering full Battery Saver recomputes dependencies and picks up the
+                // latest values.
+                if (mPolicyLevel != POLICY_LEVEL_FULL) {
+                    return;
+                }
                 updatePolicyDependenciesLocked();
             }
             maybeNotifyListenersOfPolicyChange();
