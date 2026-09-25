@@ -81,6 +81,8 @@ class ClockStyle @JvmOverloads constructor(
     private var gradientAngleDeg = 90
 
     private var aodAnimEnabled = true
+    private var aodScalePercent = DEFAULT_AOD_SCALE_PERCENT
+    private var aodOpacityCap = DEFAULT_AOD_OPACITY
     private var albumArtColorEnabled = false
     private var currentAlbumColor: Int? = null
 
@@ -183,6 +185,8 @@ class ClockStyle @JvmOverloads constructor(
             CLOCK_FRAME_MARGIN_TOP_KEY,
             CLOCK_SIZE_KEY,
             CLOCK_AOD_ANIM_KEY,
+            CLOCK_AOD_SCALE_KEY,
+            CLOCK_AOD_OPACITY_KEY,
             CLOCK_ALBUM_ART_COLOR_KEY,
             CLOCK_WOBBLE_ON_CHARGE_KEY,
             CLOCK_FRAME_MARGIN_START_KEY,
@@ -262,7 +266,7 @@ class ClockStyle @JvmOverloads constructor(
             }
             CLOCK_FRAME_MARGIN_TOP_KEY -> {
                 clockFrameMarginTop = TunerService.parseInteger(newValue, DEFAULT_MARGIN_TOP)
-                    .coerceIn(0, 200)
+                    .coerceIn(MIN_MARGIN_TOP, MAX_MARGIN_TOP)
                 updateClockFrameMargin()
             }
             CLOCK_SIZE_KEY -> {
@@ -272,6 +276,22 @@ class ClockStyle @JvmOverloads constructor(
             }
             CLOCK_AOD_ANIM_KEY -> {
                 aodAnimEnabled = TunerService.parseInteger(newValue, 1) != 0
+            }
+            CLOCK_AOD_SCALE_KEY -> {
+                aodScalePercent =
+                    TunerService.parseInteger(newValue, DEFAULT_AOD_SCALE_PERCENT)
+                        .coerceIn(MIN_AOD_SCALE_PERCENT, MAX_AOD_SCALE_PERCENT)
+                if (isDozing && aodAnimEnabled) {
+                    applyAodScale()
+                }
+            }
+            CLOCK_AOD_OPACITY_KEY -> {
+                aodOpacityCap =
+                    TunerService.parseInteger(newValue, DEFAULT_AOD_OPACITY)
+                        .coerceIn(MIN_AOD_OPACITY, MAX_AOD_OPACITY)
+                if (isDozing) {
+                    applyClockAlpha()
+                }
             }
             CLOCK_ALBUM_ART_COLOR_KEY -> {
                 val wasEnabled = albumArtColorEnabled
@@ -366,22 +386,23 @@ class ClockStyle @JvmOverloads constructor(
         val view = currentClockView ?: return
         if (!aodAnimEnabled) return
         view.animate().cancel()
+        val aodScale = getAodScaleFactor()
         if (toAod) {
             view.animate()
-                .scaleX(AOD_SCALE_DOWN)
-                .scaleY(AOD_SCALE_DOWN)
+                .scaleX(aodScale)
+                .scaleY(aodScale)
                 .alpha(0f)
                 .setDuration(AOD_ANIM_OUT_MS)
                 .setInterpolator(AccelerateInterpolator(1.5f))
                 .withEndAction {
                     applyClockAlpha()
-                    view.scaleX = AOD_SCALE_DOWN
-                    view.scaleY = AOD_SCALE_DOWN
+                    view.scaleX = aodScale
+                    view.scaleY = aodScale
                 }
                 .start()
         } else {
-            view.scaleX = AOD_SCALE_DOWN
-            view.scaleY = AOD_SCALE_DOWN
+            view.scaleX = aodScale
+            view.scaleY = aodScale
             val targetScale = getScaleFactor()
             view.animate()
                 .scaleX(targetScale)
@@ -506,8 +527,19 @@ class ClockStyle @JvmOverloads constructor(
 
     private fun applyClockAlpha() {
         val view = currentClockView ?: return
-        val effective = if (isDozing && clockOpacity > AOD_OPACITY_CAP) AOD_OPACITY_CAP else clockOpacity
+        val effective =
+            if (isDozing && clockOpacity > aodOpacityCap) aodOpacityCap else clockOpacity
         view.alpha = effective / 100f
+    }
+
+    private fun getAodScaleFactor(): Float =
+        aodScalePercent.coerceIn(MIN_AOD_SCALE_PERCENT, MAX_AOD_SCALE_PERCENT) / 100f
+
+    private fun applyAodScale() {
+        val view = currentClockView ?: return
+        val scale = getAodScaleFactor()
+        view.scaleX = scale
+        view.scaleY = scale
     }
 
     private fun resolveClockColor(): Int {
@@ -984,6 +1016,8 @@ class ClockStyle @JvmOverloads constructor(
         @JvmField val CLOCK_FRAME_MARGIN_TOP_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_MARGIN_TOP
         @JvmField val CLOCK_SIZE_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_SIZE
         @JvmField val CLOCK_AOD_ANIM_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_AOD_ANIM
+        @JvmField val CLOCK_AOD_SCALE_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_AOD_SCALE
+        @JvmField val CLOCK_AOD_OPACITY_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_AOD_OPACITY
         @JvmField val CLOCK_ALBUM_ART_COLOR_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_ALBUM_ART_COLOR
         @JvmField val CLOCK_WOBBLE_ON_CHARGE_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_WOBBLE_ON_CHARGE
         @JvmField val CLOCK_FRAME_MARGIN_START_KEY: String = Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_MARGIN_START
@@ -1002,8 +1036,15 @@ class ClockStyle @JvmOverloads constructor(
         private const val DEFAULT_STYLE = 0
         private const val DEFAULT_OPACITY = 100
         private const val DEFAULT_MARGIN_TOP = 15
+        private const val MIN_MARGIN_TOP = -200
+        private const val MAX_MARGIN_TOP = 200
         private const val DEFAULT_CUSTOM_COLOR = Color.WHITE
-        private const val AOD_OPACITY_CAP = 70
+        private const val DEFAULT_AOD_OPACITY = 70
+        private const val MIN_AOD_OPACITY = 10
+        private const val MAX_AOD_OPACITY = 100
+        private const val DEFAULT_AOD_SCALE_PERCENT = 85
+        private const val MIN_AOD_SCALE_PERCENT = 70
+        private const val MAX_AOD_SCALE_PERCENT = 100
         private const val DEFAULT_CLOCK_SIZE = 100
         private const val MIN_CLOCK_SIZE = 50
         private const val MAX_CLOCK_SIZE = 150
@@ -1022,7 +1063,6 @@ class ClockStyle @JvmOverloads constructor(
         private const val BURN_IN_PROTECTION_INTERVAL = 10_000L
         private const val BURN_IN_PROTECTION_MAX_SHIFT = 4
 
-        private const val AOD_SCALE_DOWN = 0.85f
         private const val AOD_ANIM_OUT_MS = 300L
         private const val AOD_ANIM_IN_MS = 400L
 
