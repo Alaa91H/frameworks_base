@@ -36,6 +36,9 @@ import android.util.Log;
 import com.android.internal.util.evolution.PixelDeviceRepository;
 import com.android.server.NtServiceInjector;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -94,6 +97,7 @@ public class AxSpoofManager implements IAxSpoofManager {
     private static final String KEYBOX_SOURCE_USER = "user";
     private static final String OFFICIAL_KEYBOX_URL =
             "https://git.evolution-x.org/EvoX/keybox/raw/branch/main/keybox.xml";
+    private static final int MAX_KEYBOX_DOWNLOAD_BYTES = 2 * 1024 * 1024;
 
     private static final String VENDING_PACKAGE = "com.android.vending";
     private static final String[] GMS_FAMILY = {
@@ -443,10 +447,10 @@ public class AxSpoofManager implements IAxSpoofManager {
         // work out how long this fingerprint has left instead of always seeing
         // "unknown" and refetching daily.
         if (matched.isCanary) {
-            String newCanaryMonth = matched.securityPatch != null
+            String canaryMonth = matched.securityPatch != null
                     && matched.securityPatch.length() >= 7
                     ? matched.securityPatch.substring(0, 7) : null;
-            if (newCanaryMonth != null) toSave.put("_canary_month", newCanaryMonth);
+            if (canaryMonth != null) toSave.put("_canary_month", canaryMonth);
             if (matched.releaseDate != null) {
                 toSave.put("_canary_release_date", matched.releaseDate);
             }
@@ -485,13 +489,8 @@ public class AxSpoofManager implements IAxSpoofManager {
             return; // user manages their own keybox — never overwrite it
         }
 
-        String xml = runBounded(() -> {
-            HttpURLConnection conn = (HttpURLConnection) new URL(OFFICIAL_KEYBOX_URL).openConnection();
-            conn.setConnectTimeout(10_000);
-            conn.setReadTimeout(10_000);
-            if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) return null;
-            return new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        });
+        String xml = runBounded(() -> downloadUtf8Bounded(
+                OFFICIAL_KEYBOX_URL, MAX_KEYBOX_DOWNLOAD_BYTES));
         if (xml == null || xml.trim().isEmpty()) return;
         if (!looksLikeKeybox(xml)) {
             // A captive portal or error page can come back as a 200; never let
@@ -513,6 +512,46 @@ public class AxSpoofManager implements IAxSpoofManager {
 
         killGmsFamily();
         Log.i(TAG, "Auto-refreshed official keybox");
+    }
+
+    private static String downloadUtf8Bounded(String url, int maxBytes) throws IOException {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setConnectTimeout(10_000);
+            conn.setReadTimeout(10_000);
+            conn.setUseCaches(false);
+
+            if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                return null;
+            }
+
+            final long contentLength = conn.getContentLengthLong();
+            if (contentLength > maxBytes) {
+                throw new IOException("Response too large: " + contentLength + " bytes");
+            }
+
+            final int initialCapacity = contentLength > 0
+                    ? (int) Math.min(contentLength, maxBytes) : 8 * 1024;
+            try (InputStream in = conn.getInputStream();
+                    ByteArrayOutputStream out = new ByteArrayOutputStream(initialCapacity)) {
+                final byte[] buffer = new byte[8 * 1024];
+                int total = 0;
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    total += read;
+                    if (total > maxBytes) {
+                        throw new IOException("Response exceeded " + maxBytes + " bytes");
+                    }
+                    out.write(buffer, 0, read);
+                }
+                return new String(out.toByteArray(), StandardCharsets.UTF_8);
+            }
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
     }
 
     /** Keybox XML from a stored value that is either raw XML or Base64 of it; null if neither. */
