@@ -29,6 +29,8 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.os.UserHandle
+import android.provider.Settings
 import android.view.View
 import androidx.core.graphics.ColorUtils
 import com.android.app.animation.Interpolators
@@ -67,6 +69,7 @@ class FaceScanningOverlay(
     private var rimAnimator: AnimatorSet? = null
     private val rimRect = RectF()
     private var cameraProtectionColor = Color.BLACK
+    private var useElectricFaceRing = false
 
     @ColorInt private var lockscreenAnimationColor: Int = 0
     @ColorInt private var onScrimColor: Int = 0
@@ -105,7 +108,7 @@ class FaceScanningOverlay(
         if (protectionRect.isEmpty) {
             return
         }
-        if (rimProgress > HIDDEN_RIM_SCALE) {
+        if (rimProgress > HIDDEN_RIM_SCALE && !useElectricFaceRing) {
             drawFaceScanningRim(canvas)
         }
         if (cameraProtectionProgress > HIDDEN_CAMERA_PROTECTION_SCALE) {
@@ -118,7 +121,17 @@ class FaceScanningOverlay(
             keyguardUpdateMonitor.isFaceAuthOrDetectionRunning || authController.isShowing || mDebug
         val faceAuthSucceeded = keyguardUpdateMonitor.isFaceAuthenticated
         val showScanningAnimationNow = scanningAnimationRequiredWhenCameraActive && isCameraActive
+        val useElectricFaceRingNow =
+            isElectricFaceRingEnabled() &&
+                keyguardUpdateMonitor.isKeyguardVisible &&
+                keyguardUpdateMonitor.isDeviceInteractive &&
+                keyguardUpdateMonitor.isFaceAuthOrDetectionRunning
+        val electricRingSettingChanged = useElectricFaceRingNow != useElectricFaceRing
+        useElectricFaceRing = useElectricFaceRingNow
         if (showScanningAnimationNow == showScanningAnim) {
+            if (electricRingSettingChanged) {
+                invalidate()
+            }
             return
         }
         logger.cameraProtectionShownOrHidden(
@@ -147,6 +160,14 @@ class FaceScanningOverlay(
             FaceUnlockProxy.INSTANCE().setBouncerState(FaceUnlockImageView.State.SUCCESS)
         }
     }
+
+    private fun isElectricFaceRingEnabled(): Boolean =
+        Settings.System.getIntForUser(
+            context.contentResolver,
+            "face_unlock_scan_effect",
+            0,
+            UserHandle.USER_CURRENT,
+        ) != 0
 
     private fun faceScanningRimAnimator(
         faceAuthSucceeded: Boolean,
