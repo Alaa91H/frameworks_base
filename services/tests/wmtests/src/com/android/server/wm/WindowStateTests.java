@@ -1991,6 +1991,32 @@ public class WindowStateTests extends WindowTestsBase {
     }
 
     @Test
+    public void testIsSecureLocked_windowIgnoreSecure() {
+        WindowState window = newWindowBuilder("test-window", TYPE_APPLICATION).setOwnerId(
+                1).build();
+        window.mAttrs.flags |= WindowManager.LayoutParams.FLAG_SECURE;
+        ContentResolver cr = useFakeSettingsProvider();
+
+        // FLAG_SECURE must be honored while the user option is disabled.
+        Settings.Global.putInt(cr, Settings.Global.WINDOW_IGNORE_SECURE, 0);
+        mWm.mSettingsObserver.onChange(false /* selfChange */,
+                Settings.Global.getUriFor(Settings.Global.WINDOW_IGNORE_SECURE));
+        assertTrue(window.isSecureLocked());
+
+        // Enabling the user option must make the same live window capturable.
+        Settings.Global.putInt(cr, Settings.Global.WINDOW_IGNORE_SECURE, 1);
+        mWm.mSettingsObserver.onChange(false /* selfChange */,
+                Settings.Global.getUriFor(Settings.Global.WINDOW_IGNORE_SECURE));
+        assertFalse(window.isSecureLocked());
+
+        // Disabling it again must restore FLAG_SECURE without recreating the window.
+        Settings.Global.putInt(cr, Settings.Global.WINDOW_IGNORE_SECURE, 0);
+        mWm.mSettingsObserver.onChange(false /* selfChange */,
+                Settings.Global.getUriFor(Settings.Global.WINDOW_IGNORE_SECURE));
+        assertTrue(window.isSecureLocked());
+    }
+
+    @Test
     public void testIsSecureLocked_disableSecureWindows() {
         assumeTrue(Build.IS_DEBUGGABLE);
 

@@ -7,11 +7,16 @@ on:
     paths:
       - "core/java/android/app/ActivityThread.java"
       - "core/java/android/provider/Settings.java"
+      - "core/java/android/view/Window.java"
       - "packages/SettingsProvider/src/android/provider/settings/backup/SecureSettings.java"
       - "packages/SettingsProvider/src/android/provider/settings/validators/SecureSettingsValidators.java"
       - "packages/SystemUI/src/com/android/systemui/axdynamicbar/data/source/SystemIslandManager.kt"
       - "packages/SystemUI/src/com/android/systemui/qrcodescanner/controller/QRCodeScannerController.java"
       - "services/core/java/com/android/server/wm/Session.java"
+      - "services/core/java/com/android/server/wm/WindowManagerService.java"
+      - "services/core/java/com/android/server/wm/WindowState.java"
+      - "services/core/java/com/android/server/wm/RootWindowContainer.java"
+      - "services/tests/wmtests/src/com/android/server/wm/WindowStateTests.java"
       - "tools/validate_home_dt2s.py"
       - "tools/validate_framework_regressions.py"
       - ".github/workflows/home-dt2s-validation.yml"
@@ -35,11 +40,16 @@ jobs:
           sparse-checkout: |
             core/java/android/app/ActivityThread.java
             core/java/android/provider/Settings.java
+            core/java/android/view/Window.java
             packages/SettingsProvider/src/android/provider/settings/backup/SecureSettings.java
             packages/SettingsProvider/src/android/provider/settings/validators/SecureSettingsValidators.java
             packages/SystemUI/src/com/android/systemui/axdynamicbar/data/source/SystemIslandManager.kt
             packages/SystemUI/src/com/android/systemui/qrcodescanner/controller/QRCodeScannerController.java
             services/core/java/com/android/server/wm/Session.java
+            services/core/java/com/android/server/wm/WindowManagerService.java
+            services/core/java/com/android/server/wm/WindowState.java
+            services/core/java/com/android/server/wm/RootWindowContainer.java
+            services/tests/wmtests/src/com/android/server/wm/WindowStateTests.java
             tools/validate_home_dt2s.py
             tools/validate_framework_regressions.py
 
