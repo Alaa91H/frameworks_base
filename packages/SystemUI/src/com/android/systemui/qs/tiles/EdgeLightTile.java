@@ -1,38 +1,21 @@
 /*
- * Copyright (C) 2015 The CyanogenMod Project
- * Copyright (C) 2017-2021 The LineageOS Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * SPDX-FileCopyrightText: 2026 Evolution X
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package com.android.systemui.qs.tiles;
 
-import static com.android.internal.logging.MetricsLogger.VIEW_UNKNOWN;
-
 import android.content.Intent;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemProperties;
 import android.provider.Settings;
-import android.provider.Settings.Secure;
 import android.service.quicksettings.Tile;
-import android.text.TextUtils;
 import android.widget.Switch;
 
 import androidx.annotation.Nullable;
 
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.animation.Expandable;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -42,27 +25,32 @@ import com.android.systemui.plugins.qs.QSTile.BooleanState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.QsEventLogger;
+import com.android.systemui.qs.UserSettingObserver;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
-import com.android.systemui.qs.UserSettingObserver;
 import com.android.systemui.res.R;
 import com.android.systemui.settings.UserTracker;
-import com.android.systemui.util.settings.SecureSettings;
+import com.android.systemui.util.settings.SystemSettings;
 
 import javax.inject.Inject;
 
-/** Quick settings tile: Ambient Display **/
-public class AmbientDisplayTile extends QSTileImpl<BooleanState> {
+/** Quick Settings tile for the Edge Lighting master switch. */
+public class EdgeLightTile extends QSTileImpl<BooleanState> {
 
-    public static final String TILE_SPEC = "ambient_display";
+    public static final String TILE_SPEC = "edge_light";
+
+    private static final Intent EDGE_LIGHT_SETTINGS =
+            new Intent("com.android.settings.EDGE_LIGHT_SETTINGS")
+                    .setPackage("com.android.settings")
+                    .addCategory(Intent.CATEGORY_DEFAULT);
 
     @Nullable
-    private Icon mIcon = null;
+    private Icon mIcon;
 
     private final UserSettingObserver mSetting;
 
     @Inject
-    public AmbientDisplayTile(
+    public EdgeLightTile(
             QSHost host,
             QsEventLogger uiEventLogger,
             @Background Looper backgroundLooper,
@@ -72,34 +60,23 @@ public class AmbientDisplayTile extends QSTileImpl<BooleanState> {
             StatusBarStateController statusBarStateController,
             ActivityStarter activityStarter,
             QSLogger qsLogger,
-            UserTracker userTracker,
-            SecureSettings secureSettings
+            SystemSettings systemSettings,
+            UserTracker userTracker
     ) {
         super(host, uiEventLogger, backgroundLooper, mainHandler, falsingManager, metricsLogger,
                 statusBarStateController, activityStarter, qsLogger);
 
-        mSetting = new UserSettingObserver(secureSettings, mHandler, Secure.DOZE_ENABLED,
-                userTracker.getUserId(), 1) {
+        mSetting = new UserSettingObserver(
+                systemSettings,
+                mHandler,
+                Settings.System.EDGE_LIGHT_ENABLED,
+                userTracker.getUserId()
+        ) {
             @Override
             protected void handleValueChanged(int value, boolean observedChange) {
                 handleRefreshState(value);
             }
         };
-    }
-
-    @Override
-    protected void handleDestroy() {
-        mSetting.setListening(false);
-        super.handleDestroy();
-    }
-
-    @Override
-    public boolean isAvailable() {
-        String name = Build.IS_DEBUGGABLE ? SystemProperties.get("debug.doze.component") : null;
-        if (TextUtils.isEmpty(name)) {
-            name = mContext.getString(com.android.internal.R.string.config_dozeComponent);
-        }
-        return !TextUtils.isEmpty(name);
     }
 
     @Override
@@ -114,51 +91,56 @@ public class AmbientDisplayTile extends QSTileImpl<BooleanState> {
     }
 
     @Override
+    protected void handleDestroy() {
+        mSetting.setListening(false);
+        super.handleDestroy();
+    }
+
+    @Override
     protected void handleUserSwitch(int newUserId) {
         mSetting.setUserId(newUserId);
-        handleRefreshState(mSetting.getValue());
+        refreshState();
     }
 
     @Override
     protected void handleClick(@Nullable Expandable expandable) {
-        final int value = mState.value ? 0 : 1;
-        mSetting.setValue(value);
-        refreshState(value);
+        mSetting.setValue(mState.value ? 0 : 1);
+        refreshState();
     }
 
     @Override
     public Intent getLongClickIntent() {
-        return new Intent(Settings.ACTION_DISPLAY_SETTINGS);
+        return EDGE_LIGHT_SETTINGS;
+    }
+
+    @Override
+    public CharSequence getTileLabel() {
+        return mContext.getString(R.string.quick_settings_edge_light_label);
     }
 
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
         final int value = arg instanceof Integer ? (Integer) arg : mSetting.getValue();
-        final boolean enable = value != 0;
-        state.value = enable;
-        state.label = mContext.getString(R.string.quick_settings_ambient_display_label);
+        final boolean enabled = value != 0;
+
         if (mIcon == null) {
-            mIcon = maybeLoadResourceIcon(R.drawable.ic_qs_ambient_display);
+            mIcon = maybeLoadResourceIcon(R.drawable.ic_qs_edge_light);
         }
+
         state.icon = mIcon;
-        state.secondaryLabel = mContext.getString(enable
+        state.value = enabled;
+        state.label = getTileLabel();
+        state.secondaryLabel = mContext.getString(enabled
                 ? R.string.quick_settings_state_on
                 : R.string.quick_settings_state_off);
         state.stateDescription = state.secondaryLabel;
-        state.contentDescription = mContext.getString(enable
-                ? R.string.accessibility_quick_settings_ambient_display_on
-                : R.string.accessibility_quick_settings_ambient_display_off);
+        state.contentDescription = state.label + ", " + state.secondaryLabel;
         state.expandedAccessibilityClassName = Switch.class.getName();
-        state.state = enable ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
-    }
-
-    @Override
-    public CharSequence getTileLabel() {
-        return mContext.getString(R.string.quick_settings_ambient_display_label);
+        state.state = enabled ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
     }
 
     @Override
     public int getMetricsCategory() {
-        return VIEW_UNKNOWN;
+        return MetricsEvent.EVOLVER;
     }
 }
