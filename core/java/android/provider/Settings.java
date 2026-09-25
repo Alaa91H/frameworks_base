@@ -7584,6 +7584,30 @@ public final class Settings {
          */
         public static final String EDGE_LIGHT_ANIMATION_EFFECT = "edge_light_animation_effect";
 
+        /** @hide */
+        public static final String EDGE_LIGHT_LOCATION_TOP = "edge_light_location_top";
+
+        /** @hide */
+        public static final String EDGE_LIGHT_LOCATION_SIDES = "edge_light_location_sides";
+
+        /** @hide */
+        public static final String EDGE_LIGHT_LOCATION_BOTTOM = "edge_light_location_bottom";
+
+        /** @hide */
+        public static final String EDGE_LIGHT_SCREEN_ON = "edge_light_screen_on";
+
+        /** @hide */
+        public static final String EDGE_LIGHT_SCREEN_OFF = "edge_light_screen_off";
+
+        /** @hide */
+        public static final String EDGE_LIGHT_AOD = "edge_light_aod";
+
+        /** @hide */
+        public static final String EDGE_LIGHT_ALL_STATES = "edge_light_all_states";
+
+        /** @hide */
+        public static final String EDGE_LIGHT_AURORA_MULTICOLOR = "edge_light_aurora_multicolor";
+
         /**
          * Use doubletap as doze pulse triggers
          * @hide

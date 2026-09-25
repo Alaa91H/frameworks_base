@@ -2,16 +2,6 @@
  * Copyright (C) 2025 The AxionAOSP Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 package com.android.systemui.edgelight
 
@@ -25,8 +15,10 @@ import android.os.Looper
 import android.os.UserHandle
 import android.provider.Settings
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 const val EDGE_LIGHT_DEFAULT_SPREAD = 0.00f
 const val EDGE_LIGHT_DEFAULT_INTENSITY = 0.00f
@@ -41,66 +33,101 @@ data class EdgeLightSettings(
     val animationEffect: String,
     val spread: Float = EDGE_LIGHT_DEFAULT_SPREAD,
     val intensity: Float = EDGE_LIGHT_DEFAULT_INTENSITY,
+    val showTop: Boolean = false,
+    val showSides: Boolean = true,
+    val showBottom: Boolean = false,
+    val showScreenOn: Boolean = false,
+    val showScreenOff: Boolean = true,
+    val showAod: Boolean = true,
+    val showAllStates: Boolean = false,
+    val auroraMulticolor: Boolean = true,
 )
 
 class EdgeLightSettingsRepository(context: Context) {
 
     private val resolver: ContentResolver = context.contentResolver
-
-    private val DEFAULT_CUSTOM_COLOR = Color.WHITE
+    private val defaultCustomColor = Color.WHITE
 
     val settingsFlow: Flow<EdgeLightSettings> = combine(
         observeSettingInt(SETTING_ENABLED, 0),
         observeSettingString(SETTING_COLOR_MODE, "accent"),
-        observeSettingInt(SETTING_CUSTOM_COLOR, DEFAULT_CUSTOM_COLOR),
+        observeSettingInt(SETTING_CUSTOM_COLOR, defaultCustomColor),
         observeSettingInt(SETTING_PULSE_COUNT, 3),
         observeSettingInt(SETTING_STROKE_WIDTH, 8),
         observeSettingString(SETTING_EDGE_STYLE, "default"),
         observeSettingString(SETTING_ANIMATION_EFFECT, "none"),
         observeSettingInt(SETTING_SPREAD, (EDGE_LIGHT_DEFAULT_SPREAD * 100).toInt()),
         observeSettingInt(SETTING_INTENSITY, (EDGE_LIGHT_DEFAULT_INTENSITY * 100).toInt()),
-    ) { flows: Array<Any?> ->
-        val enabled = flows[0] as Int
-        val mode = flows[1] as String
-        val color = flows[2] as Int
-        val pulses = flows[3] as Int
-        val width = flows[4] as Int
-        val style = flows[5] as String
-        val effect = flows[6] as String
-        val spreadRaw = flows[7] as Int
-        val intensityRaw = flows[8] as Int
+        observeSettingInt(SETTING_LOCATION_TOP, 0),
+        observeSettingInt(SETTING_LOCATION_SIDES, 1),
+        observeSettingInt(SETTING_LOCATION_BOTTOM, 0),
+        observeSettingInt(SETTING_SCREEN_ON, 0),
+        observeSettingInt(SETTING_SCREEN_OFF, 1),
+        observeSettingInt(SETTING_AOD, 1),
+        observeSettingInt(SETTING_ALL_STATES, 0),
+        observeSettingInt(SETTING_AURORA_MULTICOLOR, 1),
+    ) { values: Array<Any?> ->
+        val pulseCount = (values[3] as Int).coerceIn(1, 5)
+        val strokeWidth = (values[4] as Int).coerceIn(2, 32)
+        val spread = ((values[7] as Int) / 100f).coerceIn(0f, 1f)
+        val intensity = ((values[8] as Int) / 100f).coerceIn(0f, 1f)
 
-        val pulsesClamped = pulses.coerceIn(1, 5)
-        val widthClamped = width.coerceIn(2, 32)
-        val spreadClamped    = (spreadRaw / 100f).coerceIn(0.05f, 1f)
-        val intensityClamped = (intensityRaw / 100f).coerceIn(0f, 1f)
         EdgeLightSettings(
-            enabled == 1, mode, color, pulsesClamped, widthClamped, style, effect,
-            spreadClamped, intensityClamped
+            isEnabled = values[0] as Int == 1,
+            colorMode = values[1] as String,
+            customColor = values[2] as Int,
+            pulseCount = pulseCount,
+            strokeWidth = strokeWidth,
+            edgeStyle = values[5] as String,
+            animationEffect = values[6] as String,
+            spread = spread,
+            intensity = intensity,
+            showTop = values[9] as Int == 1,
+            showSides = values[10] as Int == 1,
+            showBottom = values[11] as Int == 1,
+            showScreenOn = values[12] as Int == 1,
+            showScreenOff = values[13] as Int == 1,
+            showAod = values[14] as Int == 1,
+            showAllStates = values[15] as Int == 1,
+            auroraMulticolor = values[16] as Int == 1,
         )
     }.distinctUntilChanged()
 
     fun currentSettings(): EdgeLightSettings = EdgeLightSettings(
-        isEnabled = Settings.System.getIntForUser(resolver, SETTING_ENABLED, 0, UserHandle.USER_CURRENT) == 1,
-        colorMode = Settings.System.getStringForUser(resolver, SETTING_COLOR_MODE, UserHandle.USER_CURRENT) ?: "accent",
-        customColor = Settings.System.getIntForUser(resolver, SETTING_CUSTOM_COLOR, DEFAULT_CUSTOM_COLOR, UserHandle.USER_CURRENT),
-        pulseCount = Settings.System.getIntForUser(resolver, SETTING_PULSE_COUNT, 3, UserHandle.USER_CURRENT),
-        strokeWidth = Settings.System.getIntForUser(resolver, SETTING_STROKE_WIDTH, 8, UserHandle.USER_CURRENT),
-        edgeStyle = Settings.System.getStringForUser(resolver, SETTING_EDGE_STYLE, UserHandle.USER_CURRENT) ?: "default",
-        animationEffect = Settings.System.getStringForUser(resolver, SETTING_ANIMATION_EFFECT, UserHandle.USER_CURRENT) ?: "none",
-        spread = Settings.System.getIntForUser(resolver, SETTING_SPREAD, (EDGE_LIGHT_DEFAULT_SPREAD * 100).toInt(), UserHandle.USER_CURRENT) / 100f,
-        intensity = Settings.System.getIntForUser(resolver, SETTING_INTENSITY, (EDGE_LIGHT_DEFAULT_INTENSITY * 100).toInt(), UserHandle.USER_CURRENT) / 100f,
+        isEnabled = readInt(SETTING_ENABLED, 0) == 1,
+        colorMode = readString(SETTING_COLOR_MODE, "accent"),
+        customColor = readInt(SETTING_CUSTOM_COLOR, defaultCustomColor),
+        pulseCount = readInt(SETTING_PULSE_COUNT, 3).coerceIn(1, 5),
+        strokeWidth = readInt(SETTING_STROKE_WIDTH, 8).coerceIn(2, 32),
+        edgeStyle = readString(SETTING_EDGE_STYLE, "default"),
+        animationEffect = readString(SETTING_ANIMATION_EFFECT, "none"),
+        spread = (readInt(SETTING_SPREAD, 0) / 100f).coerceIn(0f, 1f),
+        intensity = (readInt(SETTING_INTENSITY, 0) / 100f).coerceIn(0f, 1f),
+        showTop = readInt(SETTING_LOCATION_TOP, 0) == 1,
+        showSides = readInt(SETTING_LOCATION_SIDES, 1) == 1,
+        showBottom = readInt(SETTING_LOCATION_BOTTOM, 0) == 1,
+        showScreenOn = readInt(SETTING_SCREEN_ON, 0) == 1,
+        showScreenOff = readInt(SETTING_SCREEN_OFF, 1) == 1,
+        showAod = readInt(SETTING_AOD, 1) == 1,
+        showAllStates = readInt(SETTING_ALL_STATES, 0) == 1,
+        auroraMulticolor = readInt(SETTING_AURORA_MULTICOLOR, 1) == 1,
     )
+
+    private fun readInt(key: String, default: Int): Int =
+        Settings.System.getIntForUser(resolver, key, default, UserHandle.USER_CURRENT)
+
+    private fun readString(key: String, default: String): String =
+        Settings.System.getStringForUser(resolver, key, UserHandle.USER_CURRENT) ?: default
 
     private fun observeSettingInt(key: String, default: Int): Flow<Int> = callbackFlow {
         val uri = Settings.System.getUriFor(key)
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean, uri: Uri?) {
-                trySend(Settings.System.getIntForUser(resolver, key, default, UserHandle.USER_CURRENT))
+                trySend(readInt(key, default))
             }
         }
-        resolver.registerContentObserver(uri, false, observer)
-        trySend(Settings.System.getIntForUser(resolver, key, default, UserHandle.USER_CURRENT))
+        resolver.registerContentObserver(uri, false, observer, UserHandle.USER_ALL)
+        trySend(readInt(key, default))
         awaitClose { resolver.unregisterContentObserver(observer) }
     }.distinctUntilChanged()
 
@@ -108,11 +135,11 @@ class EdgeLightSettingsRepository(context: Context) {
         val uri = Settings.System.getUriFor(key)
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean, uri: Uri?) {
-                trySend(Settings.System.getStringForUser(resolver, key, UserHandle.USER_CURRENT) ?: default)
+                trySend(readString(key, default))
             }
         }
-        resolver.registerContentObserver(uri, false, observer)
-        trySend(Settings.System.getStringForUser(resolver, key, UserHandle.USER_CURRENT) ?: default)
+        resolver.registerContentObserver(uri, false, observer, UserHandle.USER_ALL)
+        trySend(readString(key, default))
         awaitClose { resolver.unregisterContentObserver(observer) }
     }.distinctUntilChanged()
 
@@ -126,5 +153,13 @@ class EdgeLightSettingsRepository(context: Context) {
         private const val SETTING_ANIMATION_EFFECT = Settings.System.EDGE_LIGHT_ANIMATION_EFFECT
         private const val SETTING_SPREAD = Settings.System.EDGE_LIGHT_SPREAD
         private const val SETTING_INTENSITY = Settings.System.EDGE_LIGHT_INTENSITY
+        private const val SETTING_LOCATION_TOP = Settings.System.EDGE_LIGHT_LOCATION_TOP
+        private const val SETTING_LOCATION_SIDES = Settings.System.EDGE_LIGHT_LOCATION_SIDES
+        private const val SETTING_LOCATION_BOTTOM = Settings.System.EDGE_LIGHT_LOCATION_BOTTOM
+        private const val SETTING_SCREEN_ON = Settings.System.EDGE_LIGHT_SCREEN_ON
+        private const val SETTING_SCREEN_OFF = Settings.System.EDGE_LIGHT_SCREEN_OFF
+        private const val SETTING_AOD = Settings.System.EDGE_LIGHT_AOD
+        private const val SETTING_ALL_STATES = Settings.System.EDGE_LIGHT_ALL_STATES
+        private const val SETTING_AURORA_MULTICOLOR = Settings.System.EDGE_LIGHT_AURORA_MULTICOLOR
     }
 }
