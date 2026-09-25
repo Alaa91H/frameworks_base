@@ -54,6 +54,7 @@ public class ScrollCaptureController {
     private static final float MAX_PAGES_DEFAULT = 3f;
 
     private static final String SETTING_KEY_MAX_PAGES = "screenshot.scroll_max_pages";
+    private static final String SETTING_KEY_FULL_PAGE_CAPTURE = "screenshot_full_page_capture";
     // Portion of the tiles to be acquired above the starting position in infinite scroll
     // situations. 1.0 means maximize the area above, 0 means just go down.
     private static final float IDEAL_PORTION_ABOVE = 0.4f;
@@ -246,13 +247,36 @@ public class ScrollCaptureController {
      */
     public ListenableFuture<LongScreenshot> run(ScrollCaptureResponse response) {
         mCancelled = false;
+        // Reset per-capture traversal state so repeated screenshots cannot inherit direction
+        // or boundary state from a previous session.
+        mScrollingUp = true;
+        mFinishOnBoundary = false;
         return CallbackToFutureAdapter.getFuture(completer -> {
             mCaptureCompleter = completer;
             mWindowOwner = response.getPackageName();
             mCaptureCompleter.addCancellationListener(this::onCancelled, mBgExecutor);
             mBgExecutor.execute(() -> {
+                boolean fullPageCapture = Settings.System.getInt(mContext.getContentResolver(),
+                        SETTING_KEY_FULL_PAGE_CAPTURE, 0) == 1;
                 float maxPages = Settings.Secure.getFloat(mContext.getContentResolver(),
                         SETTING_KEY_MAX_PAGES, MAX_PAGES_DEFAULT);
+
+                if (fullPageCapture) {
+                    Rect bounds = response.getBoundsInWindow();
+                    if (bounds != null && bounds.height() > 0) {
+                        // Capture at native pixel resolution until the bottom boundary is reached,
+                        // while keeping a conservative height cap to avoid excessive GPU/RAM use.
+                        maxPages = Math.max(1f, MAX_HEIGHT / (float) bounds.height());
+                    }
+                    // Full-page mode intentionally extends only downward from the current viewport.
+                    // The first empty capture therefore means the bottom boundary was reached.
+                    mScrollingUp = false;
+                    mFinishOnBoundary = true;
+                    if (LogConfig.DEBUG_SCROLL) {
+                        Log.d(TAG, "Full-page downward capture enabled, maxPages=" + maxPages);
+                    }
+                }
+
                 mSessionFuture = mClient.start(response, maxPages);
                 mSessionFuture.addListener(this::onStartComplete, mContext.getMainExecutor());
             });

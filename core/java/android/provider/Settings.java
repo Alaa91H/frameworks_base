@@ -7717,6 +7717,13 @@ public final class Settings {
         public static final String ENABLE_ROTATION_BUTTON = "enable_rotation_button";
 
         /**
+         * Whether wallpaper zoom effects are enabled. Defaults to 1 (enabled).
+         * @hide
+         */
+        @Readable
+        public static final String WALLPAPER_ZOOM_ENABLED = "wallpaper_zoom_enabled";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
@@ -12724,6 +12731,15 @@ public final class Settings {
         public static final String DOUBLE_TAP_TO_SLEEP = "double_tap_to_sleep";
 
         /**
+         * Controls whether double tap to sleep is enabled on an empty area of the Home screen.
+         *
+         * <p>This is intentionally separate from {@link #DOUBLE_TAP_TO_SLEEP}, which is consumed
+         * by SystemUI for keyguard double-tap handling.</p>
+         * @hide
+         */
+        public static final String HOME_DOUBLE_TAP_TO_SLEEP = "home_double_tap_to_sleep";
+
+        /**
          * The current assistant component. It could be a voice interaction service,
          * or an activity that handles ACTION_ASSIST, or empty which means using the default
          * handling.
@@ -14771,6 +14787,20 @@ public final class Settings {
         public static final String LOCK_SCREEN_CUSTOM_CLOCK_AOD_ANIM = "lock_screen_custom_clock_aod_anim";
 
         /**
+         * Custom clock scale used while the AOD transition is active.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_AOD_SCALE =
+                "lock_screen_custom_clock_aod_scale";
+
+        /**
+         * Maximum custom clock opacity while dozing.
+         * @hide
+         */
+        public static final String LOCK_SCREEN_CUSTOM_CLOCK_AOD_OPACITY =
+                "lock_screen_custom_clock_aod_opacity";
+
+        /**
          * Custom clock animation
          * @hide
          */
@@ -15272,6 +15302,13 @@ public final class Settings {
          */
         @Readable
         public static final String QSTILE_REQUIRES_UNLOCKING = "qstile_requires_unlocking";
+
+        /**
+         * Whether to show an overlay in the bottom corner of the screen on copying stuff
+         * into the clipboard.
+         * @hide
+         */
+        public static final String SHOW_CLIPBOARD_OVERLAY = "show_clipboard_overlay";
 
         /**
          * These entries are considered common between the personal and the managed profile,

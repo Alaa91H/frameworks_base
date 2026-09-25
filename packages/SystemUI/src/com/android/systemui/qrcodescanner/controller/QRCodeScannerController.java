@@ -88,6 +88,11 @@ public class QRCodeScannerController implements
     public static final int QR_CODE_SCANNER_PREFERENCE_CHANGE = 1;
 
     private static final String TAG = "QRCodeScannerController";
+    private static final String GOOGLE_PLAY_SERVICES_PACKAGE = "com.google.android.gms";
+    private static final String GOOGLE_QR_SCANNER_ACTIVITY =
+            "com.google.android.gms.mlkit.barcode.ui.PlatformBarcodeScanningActivityProxy";
+    private static final String EXTRA_FORCE_LTR_LAYOUT_DIRECTION =
+            "com.android.systemui.extra.FORCE_LTR_LAYOUT_DIRECTION";
 
     private final Context mContext;
     private final Executor mExecutor;
@@ -298,6 +303,16 @@ public class QRCodeScannerController implements
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
             if (qrCodeScannerIntentAction() && !TextUtils.isEmpty(qrCodeScannerIntentAction)) {
                 intent.setAction(qrCodeScannerIntentAction);
+            }
+
+            // Google Play services mirrors the QR viewfinder corner assets in RTL locales,
+            // which makes the four brackets face outwards. Mark only the GMS scanner launch so
+            // the framework can keep its physical viewfinder geometry LTR without changing the
+            // user's locale or affecting other QR scanner providers.
+            if (componentName != null
+                    && GOOGLE_PLAY_SERVICES_PACKAGE.equals(componentName.getPackageName())
+                    && GOOGLE_QR_SCANNER_ACTIVITY.equals(componentName.getClassName())) {
+                intent.putExtra(EXTRA_FORCE_LTR_LAYOUT_DIRECTION, true);
             }
         }
 
