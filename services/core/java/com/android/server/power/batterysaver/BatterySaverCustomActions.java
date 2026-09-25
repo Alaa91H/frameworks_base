@@ -56,6 +56,8 @@ final class BatterySaverCustomActions extends ContentObserver {
 
     private static final String SETTING_CPU_MAX_FREQ_BACKUP =
             "low_power_cpu_max_freq_backup";
+    private static final String SETTING_CPU_APPLIED_FREQ_BACKUP =
+            "low_power_cpu_applied_freq_backup";
     private static final String SETTING_SCREEN_TIMEOUT_BACKUPS =
             "low_power_screen_timeout_backups";
     // Legacy single-user backup keys, kept only for migration.
@@ -139,6 +141,7 @@ final class BatterySaverCustomActions extends ContentObserver {
                     command -> mHandler.post(command), mSubscriptionsChangedListener);
         }
         loadCpuMaxFreqBackups();
+        loadCpuAppliedFreqs();
         loadNetworkTypeBackups();
         loadScreenTimeoutBackups();
     }
@@ -267,6 +270,7 @@ final class BatterySaverCustomActions extends ContentObserver {
         }
 
         boolean backupChanged = false;
+        boolean appliedChanged = false;
         for (File policyDir : policyDirs) {
             final File scalingMaxFile = new File(policyDir, FILE_SCALING_MAX_FREQ);
             if (!scalingMaxFile.exists()) {
@@ -311,11 +315,12 @@ final class BatterySaverCustomActions extends ContentObserver {
 
                 if (currentMax != target) {
                     FileUtils.stringToFile(scalingMaxFile, Long.toString(target));
-                    mAppliedCpuMaxFreqs.put(policyName, target);
+                    final Long oldApplied = mAppliedCpuMaxFreqs.put(policyName, target);
+                    appliedChanged |= oldApplied == null || oldApplied != target;
                 } else if (!stillOwnsCurrentValue) {
                     // The current value belongs to another component; don't claim ownership just
                     // because it happens to satisfy our requested cap.
-                    mAppliedCpuMaxFreqs.remove(policyName);
+                    appliedChanged |= mAppliedCpuMaxFreqs.remove(policyName) != null;
                 }
             } catch (IOException | NumberFormatException e) {
                 Slog.w(TAG, "Unable to cap CPU frequency for " + policyDir, e);
@@ -324,6 +329,9 @@ final class BatterySaverCustomActions extends ContentObserver {
 
         if (backupChanged) {
             persistCpuMaxFreqBackups();
+        }
+        if (appliedChanged) {
+            persistCpuAppliedFreqs();
         }
     }
 
@@ -367,10 +375,14 @@ final class BatterySaverCustomActions extends ContentObserver {
 
     private void restoreCpuMaxFreqs(boolean clearBackup) {
         if (mPreviousCpuMaxFreqs.isEmpty()) {
-            mAppliedCpuMaxFreqs.clear();
+            if (!mAppliedCpuMaxFreqs.isEmpty()) {
+                mAppliedCpuMaxFreqs.clear();
+                persistCpuAppliedFreqs();
+            }
             return;
         }
 
+        boolean appliedChanged = false;
         final ArrayList<String> completed = new ArrayList<>();
         for (Map.Entry<String, Long> entry : mPreviousCpuMaxFreqs.entrySet()) {
             final String policyName = entry.getKey();
@@ -381,7 +393,7 @@ final class BatterySaverCustomActions extends ContentObserver {
                     if (clearBackup) {
                         completed.add(policyName);
                     }
-                    mAppliedCpuMaxFreqs.remove(policyName);
+                    appliedChanged |= mAppliedCpuMaxFreqs.remove(policyName) != null;
                     continue;
                 }
 
@@ -399,7 +411,7 @@ final class BatterySaverCustomActions extends ContentObserver {
                 if (currentMax != appliedMax) {
                     Slog.i(TAG, "Skipping CPU max restore for " + policyName
                             + "; current value changed from our applied cap");
-                    mAppliedCpuMaxFreqs.remove(policyName);
+                    appliedChanged |= mAppliedCpuMaxFreqs.remove(policyName) != null;
                     if (clearBackup) {
                         completed.add(policyName);
                     }
@@ -407,7 +419,7 @@ final class BatterySaverCustomActions extends ContentObserver {
                 }
 
                 FileUtils.stringToFile(scalingMaxFile, Long.toString(entry.getValue()));
-                mAppliedCpuMaxFreqs.remove(policyName);
+                appliedChanged |= mAppliedCpuMaxFreqs.remove(policyName) != null;
                 if (clearBackup) {
                     completed.add(policyName);
                 }
@@ -421,6 +433,9 @@ final class BatterySaverCustomActions extends ContentObserver {
                 mPreviousCpuMaxFreqs.remove(policy);
             }
             persistCpuMaxFreqBackups();
+        }
+        if (appliedChanged) {
+            persistCpuAppliedFreqs();
         }
     }
 
@@ -674,6 +689,60 @@ final class BatterySaverCustomActions extends ContentObserver {
         }
         Settings.Global.putString(
                 mResolver, SETTING_CPU_MAX_FREQ_BACKUP, serialized.toString());
+    }
+
+    private void loadCpuAppliedFreqs() {
+        mAppliedCpuMaxFreqs.clear();
+        final String serialized = Settings.Global.getString(
+                mResolver, SETTING_CPU_APPLIED_FREQ_BACKUP);
+        if (serialized == null || serialized.isEmpty()) {
+            return;
+        }
+
+        boolean droppedEntry = false;
+        for (String item : serialized.split(";")) {
+            final int separator = item.indexOf('=');
+            if (separator <= 0 || separator >= item.length() - 1) {
+                droppedEntry = true;
+                continue;
+            }
+            try {
+                final String policy = item.substring(0, separator);
+                final long maxFreq = Long.parseLong(item.substring(separator + 1));
+                final File scalingMaxFile = new File(
+                        new File(CPUFREQ_DIR, policy), FILE_SCALING_MAX_FREQ);
+                final long currentMax = readLong(scalingMaxFile);
+                if (maxFreq > 0 && currentMax == maxFreq
+                        && mPreviousCpuMaxFreqs.containsKey(policy)) {
+                    mAppliedCpuMaxFreqs.put(policy, maxFreq);
+                } else {
+                    droppedEntry = true;
+                }
+            } catch (IOException | NumberFormatException ignored) {
+                droppedEntry = true;
+            }
+        }
+
+        if (droppedEntry) {
+            persistCpuAppliedFreqs();
+        }
+    }
+
+    private void persistCpuAppliedFreqs() {
+        if (mAppliedCpuMaxFreqs.isEmpty()) {
+            Settings.Global.putString(mResolver, SETTING_CPU_APPLIED_FREQ_BACKUP, null);
+            return;
+        }
+
+        final StringBuilder serialized = new StringBuilder();
+        for (Map.Entry<String, Long> entry : mAppliedCpuMaxFreqs.entrySet()) {
+            if (serialized.length() > 0) {
+                serialized.append(';');
+            }
+            serialized.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        Settings.Global.putString(
+                mResolver, SETTING_CPU_APPLIED_FREQ_BACKUP, serialized.toString());
     }
 
     private void loadNetworkTypeBackups() {
