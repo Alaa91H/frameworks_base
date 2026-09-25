@@ -27,6 +27,15 @@ ROOT_WINDOW_CONTAINER = (
 WINDOW_STATE_TESTS = (
     ROOT / "services/tests/wmtests/src/com/android/server/wm/WindowStateTests.java"
 )
+EDGE_LIGHT_REPOSITORY = (
+    ROOT / "packages/SystemUI/src/com/android/systemui/edgelight/EdgeLightSettingsRepository.kt"
+)
+EDGE_LIGHT_VIEW = (
+    ROOT / "packages/SystemUI/src/com/android/systemui/edgelight/EdgeLightView.kt"
+)
+EDGE_LIGHT_CONTROLLER = (
+    ROOT / "packages/SystemUI/src/com/android/systemui/edgelight/EdgeLightViewController.kt"
+)
 
 texts = {
     "ActivityThread.java": ACTIVITY_THREAD.read_text(encoding="utf-8"),
@@ -38,6 +47,9 @@ texts = {
     "WindowState.java": WINDOW_STATE.read_text(encoding="utf-8"),
     "RootWindowContainer.java": ROOT_WINDOW_CONTAINER.read_text(encoding="utf-8"),
     "WindowStateTests.java": WINDOW_STATE_TESTS.read_text(encoding="utf-8"),
+    "EdgeLightSettingsRepository.kt": EDGE_LIGHT_REPOSITORY.read_text(encoding="utf-8"),
+    "EdgeLightView.kt": EDGE_LIGHT_VIEW.read_text(encoding="utf-8"),
+    "EdgeLightViewController.kt": EDGE_LIGHT_CONTROLLER.read_text(encoding="utf-8"),
 }
 
 checks = []
@@ -84,6 +96,66 @@ wms = texts["WindowManagerService.java"]
 window_state = texts["WindowState.java"]
 root_window = texts["RootWindowContainer.java"]
 window_state_tests = texts["WindowStateTests.java"]
+edge_light_repo = texts["EdgeLightSettingsRepository.kt"]
+edge_light_view = texts["EdgeLightView.kt"]
+edge_light_controller = texts["EdgeLightViewController.kt"]
+
+# Edge light zones and Aurora: the settings must flow from Settings.System to the repository,
+# controller and renderer. Aurora intentionally uses dense path sampling and layered rendering.
+for constant, value in (
+    ("EDGE_LIGHT_TOP_ENABLED", "edge_light_top_enabled"),
+    ("EDGE_LIGHT_SIDES_ENABLED", "edge_light_sides_enabled"),
+    ("EDGE_LIGHT_BOTTOM_ENABLED", "edge_light_bottom_enabled"),
+    ("EDGE_LIGHT_AURORA_COLOR_MODE", "edge_light_aurora_color_mode"),
+):
+    add(
+        f'public static final String {constant} = "{value}";' in settings,
+        f"Edge light setting {constant} is declared",
+        "Settings.java",
+    )
+
+for token in (
+    "val showTop: Boolean",
+    "val showSides: Boolean",
+    "val showBottom: Boolean",
+    "val auroraColorMode: String",
+    "SETTING_TOP_ENABLED",
+    "SETTING_SIDES_ENABLED",
+    "SETTING_BOTTOM_ENABLED",
+    "SETTING_AURORA_COLOR_MODE",
+):
+    add(
+        token in edge_light_repo,
+        f"Edge light repository includes {token}",
+        "EdgeLightSettingsRepository.kt",
+    )
+
+for token in (
+    "edgeLightView.showTop = currentSettings.showTop",
+    "edgeLightView.showSides = currentSettings.showSides",
+    "edgeLightView.showBottom = currentSettings.showBottom",
+    "edgeLightView.auroraColorMode = currentSettings.auroraColorMode",
+):
+    add(
+        token in edge_light_controller,
+        f"Edge light controller applies {token}",
+        "EdgeLightViewController.kt",
+    )
+
+for token in (
+    'const val EFFECT_AURORA = "aurora"',
+    'const val AURORA_MULTI = "multi"',
+    "private fun buildActivePaths()",
+    "private fun drawAuroraEffect(",
+    "highQuality = true",
+    "BlurMaskFilter",
+    "coerceAtMost(480)",
+):
+    add(
+        token in edge_light_view,
+        f"Edge light renderer includes {token}",
+        "EdgeLightView.kt",
+    )
 
 # Ignore secure window flags: keep the preference wired through the client Window path and the
 # server-side secure SurfaceControl path so screenshots and MediaProjection recordings both see

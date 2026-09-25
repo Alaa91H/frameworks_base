@@ -41,6 +41,10 @@ data class EdgeLightSettings(
     val animationEffect: String,
     val spread: Float = EDGE_LIGHT_DEFAULT_SPREAD,
     val intensity: Float = EDGE_LIGHT_DEFAULT_INTENSITY,
+    val showTop: Boolean = false,
+    val showSides: Boolean = true,
+    val showBottom: Boolean = false,
+    val auroraColorMode: String = "single",
 )
 
 class EdgeLightSettingsRepository(context: Context) {
@@ -59,6 +63,10 @@ class EdgeLightSettingsRepository(context: Context) {
         observeSettingString(SETTING_ANIMATION_EFFECT, "none"),
         observeSettingInt(SETTING_SPREAD, (EDGE_LIGHT_DEFAULT_SPREAD * 100).toInt()),
         observeSettingInt(SETTING_INTENSITY, (EDGE_LIGHT_DEFAULT_INTENSITY * 100).toInt()),
+        observeSettingInt(SETTING_TOP_ENABLED, ZONE_UNSET),
+        observeSettingInt(SETTING_SIDES_ENABLED, ZONE_UNSET),
+        observeSettingInt(SETTING_BOTTOM_ENABLED, ZONE_UNSET),
+        observeSettingString(SETTING_AURORA_COLOR_MODE, "single"),
     ) { flows: Array<Any?> ->
         val enabled = flows[0] as Int
         val mode = flows[1] as String
@@ -69,28 +77,79 @@ class EdgeLightSettingsRepository(context: Context) {
         val effect = flows[6] as String
         val spreadRaw = flows[7] as Int
         val intensityRaw = flows[8] as Int
+        val topRaw = flows[9] as Int
+        val sidesRaw = flows[10] as Int
+        val bottomRaw = flows[11] as Int
+        val auroraColorMode = flows[12] as String
 
         val pulsesClamped = pulses.coerceIn(1, 5)
         val widthClamped = width.coerceIn(2, 32)
-        val spreadClamped    = (spreadRaw / 100f).coerceIn(0.05f, 1f)
+        val spreadClamped = (spreadRaw / 100f).coerceIn(0.05f, 1f)
         val intensityClamped = (intensityRaw / 100f).coerceIn(0f, 1f)
+        val frameStyle = style.equals("rounded", ignoreCase = true) ||
+                style.equals("frame", ignoreCase = true)
+        val showTop = if (topRaw == ZONE_UNSET) frameStyle else topRaw == 1
+        val showSides = if (sidesRaw == ZONE_UNSET) true else sidesRaw == 1
+        val showBottom = if (bottomRaw == ZONE_UNSET) frameStyle else bottomRaw == 1
         EdgeLightSettings(
             enabled == 1, mode, color, pulsesClamped, widthClamped, style, effect,
-            spreadClamped, intensityClamped
+            spreadClamped, intensityClamped, showTop, showSides, showBottom,
+            auroraColorMode
         )
     }.distinctUntilChanged()
 
-    fun currentSettings(): EdgeLightSettings = EdgeLightSettings(
-        isEnabled = Settings.System.getIntForUser(resolver, SETTING_ENABLED, 0, UserHandle.USER_CURRENT) == 1,
-        colorMode = Settings.System.getStringForUser(resolver, SETTING_COLOR_MODE, UserHandle.USER_CURRENT) ?: "accent",
-        customColor = Settings.System.getIntForUser(resolver, SETTING_CUSTOM_COLOR, DEFAULT_CUSTOM_COLOR, UserHandle.USER_CURRENT),
-        pulseCount = Settings.System.getIntForUser(resolver, SETTING_PULSE_COUNT, 3, UserHandle.USER_CURRENT),
-        strokeWidth = Settings.System.getIntForUser(resolver, SETTING_STROKE_WIDTH, 8, UserHandle.USER_CURRENT),
-        edgeStyle = Settings.System.getStringForUser(resolver, SETTING_EDGE_STYLE, UserHandle.USER_CURRENT) ?: "default",
-        animationEffect = Settings.System.getStringForUser(resolver, SETTING_ANIMATION_EFFECT, UserHandle.USER_CURRENT) ?: "none",
-        spread = Settings.System.getIntForUser(resolver, SETTING_SPREAD, (EDGE_LIGHT_DEFAULT_SPREAD * 100).toInt(), UserHandle.USER_CURRENT) / 100f,
-        intensity = Settings.System.getIntForUser(resolver, SETTING_INTENSITY, (EDGE_LIGHT_DEFAULT_INTENSITY * 100).toInt(), UserHandle.USER_CURRENT) / 100f,
-    )
+    fun currentSettings(): EdgeLightSettings {
+        val style = Settings.System.getStringForUser(
+            resolver, SETTING_EDGE_STYLE, UserHandle.USER_CURRENT
+        ) ?: "default"
+        val frameStyle = style.equals("rounded", ignoreCase = true) ||
+                style.equals("frame", ignoreCase = true)
+
+        fun readZone(key: String, legacyDefault: Boolean): Boolean {
+            val raw = Settings.System.getIntForUser(
+                resolver, key, ZONE_UNSET, UserHandle.USER_CURRENT
+            )
+            return if (raw == ZONE_UNSET) legacyDefault else raw == 1
+        }
+
+        return EdgeLightSettings(
+            isEnabled = Settings.System.getIntForUser(
+                resolver, SETTING_ENABLED, 0, UserHandle.USER_CURRENT
+            ) == 1,
+            colorMode = Settings.System.getStringForUser(
+                resolver, SETTING_COLOR_MODE, UserHandle.USER_CURRENT
+            ) ?: "accent",
+            customColor = Settings.System.getIntForUser(
+                resolver, SETTING_CUSTOM_COLOR, DEFAULT_CUSTOM_COLOR, UserHandle.USER_CURRENT
+            ),
+            pulseCount = Settings.System.getIntForUser(
+                resolver, SETTING_PULSE_COUNT, 3, UserHandle.USER_CURRENT
+            ),
+            strokeWidth = Settings.System.getIntForUser(
+                resolver, SETTING_STROKE_WIDTH, 8, UserHandle.USER_CURRENT
+            ),
+            edgeStyle = style,
+            animationEffect = Settings.System.getStringForUser(
+                resolver, SETTING_ANIMATION_EFFECT, UserHandle.USER_CURRENT
+            ) ?: "none",
+            spread = Settings.System.getIntForUser(
+                resolver, SETTING_SPREAD,
+                (EDGE_LIGHT_DEFAULT_SPREAD * 100).toInt(),
+                UserHandle.USER_CURRENT
+            ) / 100f,
+            intensity = Settings.System.getIntForUser(
+                resolver, SETTING_INTENSITY,
+                (EDGE_LIGHT_DEFAULT_INTENSITY * 100).toInt(),
+                UserHandle.USER_CURRENT
+            ) / 100f,
+            showTop = readZone(SETTING_TOP_ENABLED, frameStyle),
+            showSides = readZone(SETTING_SIDES_ENABLED, true),
+            showBottom = readZone(SETTING_BOTTOM_ENABLED, frameStyle),
+            auroraColorMode = Settings.System.getStringForUser(
+                resolver, SETTING_AURORA_COLOR_MODE, UserHandle.USER_CURRENT
+            ) ?: "single",
+        )
+    }
 
     private fun observeSettingInt(key: String, default: Int): Flow<Int> = callbackFlow {
         val uri = Settings.System.getUriFor(key)
@@ -126,5 +185,10 @@ class EdgeLightSettingsRepository(context: Context) {
         private const val SETTING_ANIMATION_EFFECT = Settings.System.EDGE_LIGHT_ANIMATION_EFFECT
         private const val SETTING_SPREAD = Settings.System.EDGE_LIGHT_SPREAD
         private const val SETTING_INTENSITY = Settings.System.EDGE_LIGHT_INTENSITY
+        private const val SETTING_TOP_ENABLED = Settings.System.EDGE_LIGHT_TOP_ENABLED
+        private const val SETTING_SIDES_ENABLED = Settings.System.EDGE_LIGHT_SIDES_ENABLED
+        private const val SETTING_BOTTOM_ENABLED = Settings.System.EDGE_LIGHT_BOTTOM_ENABLED
+        private const val SETTING_AURORA_COLOR_MODE = Settings.System.EDGE_LIGHT_AURORA_COLOR_MODE
+        private const val ZONE_UNSET = -1
     }
 }
