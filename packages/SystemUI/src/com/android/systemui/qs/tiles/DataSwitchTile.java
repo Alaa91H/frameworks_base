@@ -226,7 +226,7 @@ public class DataSwitchTile extends QSTileImpl<BooleanState> {
                         : R.drawable.ic_qs_data_switch_2);
                 state.value = false;
                 state.secondaryLabel = mContext.getString(R.string.tile_unavailable);
-                state.state = 0;
+                state.state = Tile.STATE_UNAVAILABLE;
                 break;
             case 2:
                 state.icon = ResourceIcon.get(activeSIMZero
@@ -247,7 +247,7 @@ public class DataSwitchTile extends QSTileImpl<BooleanState> {
                 state.icon = ResourceIcon.get(R.drawable.ic_qs_data_switch_1);
                 state.value = false;
                 state.secondaryLabel = mContext.getString(R.string.tile_unavailable);
-                state.state = 0;
+                state.state = Tile.STATE_UNAVAILABLE;
                 break;
         }
 
