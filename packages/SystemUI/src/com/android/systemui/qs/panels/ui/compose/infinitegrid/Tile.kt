@@ -148,6 +148,7 @@ fun ContentScope.Tile(
     requestToggleTextFeedback: (TileSpec) -> Unit = {},
     detailsViewModel: DetailsViewModel?,
     enableRevealEffect: Boolean = false,
+    hideLabels: Boolean = false,
 ) {
     trace(tile.traceName) {
         val currentBounceableInfo by rememberUpdatedState(bounceableInfo)
@@ -329,8 +330,8 @@ fun ContentScope.Tile(
                                 }
                                 .takeIf { isDualTarget }
                         LargeTileContent(
-                            label = uiState.label,
-                            secondaryLabel = uiState.secondaryLabel,
+                            label = if (hideLabels) "" else uiState.label,
+                            secondaryLabel = if (hideLabels) null else uiState.secondaryLabel,
                             iconProvider = iconProvider,
                             sideDrawable = uiState.sideDrawable,
                             colors = colors,
