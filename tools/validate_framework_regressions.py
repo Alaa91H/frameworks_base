@@ -15,11 +15,29 @@ SYSTEM_ISLAND = (
     ROOT
     / "packages/SystemUI/src/com/android/systemui/axdynamicbar/data/source/SystemIslandManager.kt"
 )
+SETTINGS = ROOT / "core/java/android/provider/Settings.java"
+WINDOW = ROOT / "core/java/android/view/Window.java"
+WINDOW_MANAGER_SERVICE = (
+    ROOT / "services/core/java/com/android/server/wm/WindowManagerService.java"
+)
+WINDOW_STATE = ROOT / "services/core/java/com/android/server/wm/WindowState.java"
+ROOT_WINDOW_CONTAINER = (
+    ROOT / "services/core/java/com/android/server/wm/RootWindowContainer.java"
+)
+WINDOW_STATE_TESTS = (
+    ROOT / "services/tests/wmtests/src/com/android/server/wm/WindowStateTests.java"
+)
 
 texts = {
     "ActivityThread.java": ACTIVITY_THREAD.read_text(encoding="utf-8"),
     "QRCodeScannerController.java": QR_CONTROLLER.read_text(encoding="utf-8"),
     "SystemIslandManager.kt": SYSTEM_ISLAND.read_text(encoding="utf-8"),
+    "Settings.java": SETTINGS.read_text(encoding="utf-8"),
+    "Window.java": WINDOW.read_text(encoding="utf-8"),
+    "WindowManagerService.java": WINDOW_MANAGER_SERVICE.read_text(encoding="utf-8"),
+    "WindowState.java": WINDOW_STATE.read_text(encoding="utf-8"),
+    "RootWindowContainer.java": ROOT_WINDOW_CONTAINER.read_text(encoding="utf-8"),
+    "WindowStateTests.java": WINDOW_STATE_TESTS.read_text(encoding="utf-8"),
 }
 
 checks = []
@@ -60,6 +78,80 @@ def braced_block(text: str, anchor: str) -> str:
 activity = texts["ActivityThread.java"]
 qr = texts["QRCodeScannerController.java"]
 island = texts["SystemIslandManager.kt"]
+settings = texts["Settings.java"]
+window = texts["Window.java"]
+wms = texts["WindowManagerService.java"]
+window_state = texts["WindowState.java"]
+root_window = texts["RootWindowContainer.java"]
+window_state_tests = texts["WindowStateTests.java"]
+
+# Ignore secure window flags: keep the preference wired through the client Window path and the
+# server-side secure SurfaceControl path so screenshots and MediaProjection recordings both see
+# the same behavior, including for an already-visible window when the toggle changes.
+add(
+    'public static final String WINDOW_IGNORE_SECURE = "window_ignore_secure";' in settings,
+    "Global setting key for window_ignore_secure is declared",
+    "Settings.java",
+)
+
+try:
+    dispatch_attrs = braced_block(window, "protected void dispatchWindowAttributesChanged(")
+    add(
+        "Settings.Global.WINDOW_IGNORE_SECURE" in dispatch_attrs
+        and "attrs.flags &= ~FLAG_SECURE;" in dispatch_attrs,
+        "Window strips FLAG_SECURE whenever attributes are dispatched while override is enabled",
+        "Window.java",
+    )
+except ValueError as exc:
+    add(False, f"Unable to parse Window secure override: {exc}", "Window.java")
+
+try:
+    get_disable_secure = braced_block(wms, "boolean getDisableSecureWindows()")
+    add(
+        "Settings.Global.WINDOW_IGNORE_SECURE" in get_disable_secure
+        and "mDisableSecureWindows" in get_disable_secure,
+        "WindowManager server honors window_ignore_secure in secure-surface decisions",
+        "WindowManagerService.java",
+    )
+except ValueError as exc:
+    add(False, f"Unable to parse WMS secure override: {exc}", "WindowManagerService.java")
+
+add(
+    "mWindowIgnoreSecureUri" in wms
+    and "Settings.Global.getUriFor(Settings.Global.WINDOW_IGNORE_SECURE)" in wms
+    and "mRoot.refreshSecureSurfaceState();" in wms,
+    "WMS observes window_ignore_secure and refreshes live secure surfaces",
+    "WindowManagerService.java",
+)
+
+try:
+    is_secure = braced_block(window_state, "boolean isSecureLocked()")
+    add(
+        "mWmService.getDisableSecureWindows()" in is_secure
+        and "WindowManager.LayoutParams.FLAG_SECURE" in is_secure,
+        "WindowState routes FLAG_SECURE through the override before marking a surface secure",
+        "WindowState.java",
+    )
+except ValueError as exc:
+    add(False, f"Unable to parse WindowState secure decision: {exc}", "WindowState.java")
+
+try:
+    refresh_secure = braced_block(root_window, "void refreshSecureSurfaceState()")
+    add(
+        "w.setSecureLocked(w.isSecureLocked())" in refresh_secure,
+        "Live windows re-apply their secure SurfaceControl state after toggle changes",
+        "RootWindowContainer.java",
+    )
+except ValueError as exc:
+    add(False, f"Unable to parse secure-surface refresh: {exc}", "RootWindowContainer.java")
+
+add(
+    "testIsSecureLocked_windowIgnoreSecure" in window_state_tests
+    and "Settings.Global.WINDOW_IGNORE_SECURE" in window_state_tests
+    and "assertFalse(window.isSecureLocked())" in window_state_tests,
+    "WM test covers enabling and disabling window_ignore_secure on the same window",
+    "WindowStateTests.java",
+)
 
 # QR RTL override: keep the framework exception pinned to the actual Evolution-X Google QR proxy
 # rather than every activity hosted by Google Play services.
