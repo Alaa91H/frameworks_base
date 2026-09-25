@@ -199,6 +199,7 @@ public class PowerShareTile extends QSTileImpl<BooleanState>
         final IPowerShare powerShare = getPowerShare();
         if (powerShare == null) {
             setUnavailableState(state, R.string.quick_settings_powershare_unavailable);
+            updateNotification(false);
             return;
         }
 
