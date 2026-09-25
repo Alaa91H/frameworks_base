@@ -67,7 +67,7 @@ public class PowerShareTile extends QSTileImpl<BooleanState>
     private final BatteryManager mBatteryManager;
 
     @Nullable
-    private final Notification mNotification;
+    private Notification mNotification;
 
     @Nullable
     private Icon mIcon;
@@ -98,21 +98,9 @@ public class PowerShareTile extends QSTileImpl<BooleanState>
         mBatteryLevel = mBatteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
 
         mPowerShare = getPowerShare();
-
-        final NotificationChannel notificationChannel = new NotificationChannel(
-                CHANNEL_ID,
-                mContext.getString(R.string.quick_settings_powershare_label),
-                NotificationManager.IMPORTANCE_DEFAULT);
-        mNotificationManager.createNotificationChannel(notificationChannel);
-
-        final Notification.Builder builder = new Notification.Builder(mContext, CHANNEL_ID)
-                .setContentTitle(
-                        mContext.getString(R.string.quick_settings_powershare_enabled_label))
-                .setSmallIcon(R.drawable.ic_qs_powershare)
-                .setOnlyAlertOnce(true);
-        mNotification = builder.build();
-        mNotification.flags |= Notification.FLAG_NO_CLEAR | Notification.FLAG_ONGOING_EVENT;
-        mNotification.visibility = Notification.VISIBILITY_PUBLIC;
+        if (mPowerShare != null) {
+            ensureNotification();
+        }
 
         mBatteryController.addCallback(this);
         mCallbackRegistered = true;
@@ -139,11 +127,35 @@ public class PowerShareTile extends QSTileImpl<BooleanState>
     }
 
     private void updateNotification(boolean enabled) {
-        if (enabled && mNotification != null) {
-            mNotificationManager.notify(NOTIFICATION_ID, mNotification);
+        if (enabled) {
+            ensureNotification();
+            if (mNotification != null) {
+                mNotificationManager.notify(NOTIFICATION_ID, mNotification);
+            }
         } else {
             mNotificationManager.cancel(NOTIFICATION_ID);
         }
+    }
+
+    private void ensureNotification() {
+        if (mNotification != null) {
+            return;
+        }
+
+        final NotificationChannel notificationChannel = new NotificationChannel(
+                CHANNEL_ID,
+                mContext.getString(R.string.quick_settings_powershare_label),
+                NotificationManager.IMPORTANCE_DEFAULT);
+        mNotificationManager.createNotificationChannel(notificationChannel);
+
+        final Notification.Builder builder = new Notification.Builder(mContext, CHANNEL_ID)
+                .setContentTitle(
+                        mContext.getString(R.string.quick_settings_powershare_enabled_label))
+                .setSmallIcon(R.drawable.ic_qs_powershare)
+                .setOnlyAlertOnce(true);
+        mNotification = builder.build();
+        mNotification.flags |= Notification.FLAG_NO_CLEAR | Notification.FLAG_ONGOING_EVENT;
+        mNotification.visibility = Notification.VISIBILITY_PUBLIC;
     }
 
     @Override
@@ -289,6 +301,7 @@ public class PowerShareTile extends QSTileImpl<BooleanState>
             }
             mPowerShare = powerShare;
             mMinBatteryLevel = readMinBatteryLevel(powerShare);
+            ensureNotification();
             return mPowerShare;
         } catch (Exception e) {
             Log.e(TAG, "Failed to get PowerShare service", e);
