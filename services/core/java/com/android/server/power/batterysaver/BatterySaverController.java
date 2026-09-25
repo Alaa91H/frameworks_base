@@ -470,9 +470,15 @@ public class BatterySaverController implements BatterySaverPolicyListener {
             pmi.setPowerMode(Mode.LOW_POWER, isEnabled());
         }
 
-        // Apply custom actions once, after the Power HAL transition. On exit, restore direct
-        // mutations only after LOW_POWER has been disabled.
-        mCustomActions.setFullBatterySaverEnabled(fullEnabled);
+        // On a full-saver transition, apply all custom actions once after the Power HAL.
+        // For same-state LOW_POWER re-assertions (for example screen interactive changes), only
+        // re-apply the CPU cap because the HAL may have rewritten cpufreq state. 5G and timeout
+        // remain event-driven by their own settings/subscription observers.
+        if (fullEnabled != fullPreviouslyEnabled) {
+            mCustomActions.setFullBatterySaverEnabled(fullEnabled);
+        } else if (fullEnabled) {
+            mCustomActions.reapplyCpuLimit();
+        }
 
         updateBatterySavingStats();
 

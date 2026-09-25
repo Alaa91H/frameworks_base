@@ -38,6 +38,7 @@ import com.android.server.LocalServices;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -56,6 +57,8 @@ final class BatterySaverCustomActions extends ContentObserver {
 
     private static final String SETTING_CPU_MAX_FREQ_BACKUP =
             "low_power_cpu_max_freq_backup";
+    private static final String SETTING_CPU_APPLIED_FREQ_BACKUP =
+            "low_power_cpu_applied_freq_backup";
     private static final String SETTING_SCREEN_TIMEOUT_BACKUPS =
             "low_power_screen_timeout_backups";
     // Legacy single-user backup keys, kept only for migration.
@@ -64,6 +67,7 @@ final class BatterySaverCustomActions extends ContentObserver {
     private static final String SETTING_SCREEN_TIMEOUT_BACKUP_USER =
             "low_power_screen_timeout_backup_user";
     private static final String SETTING_5G_BACKUP = "low_power_5g_backup";
+    private static final String SETTING_5G_APPLIED_BACKUP = "low_power_5g_applied_backup";
 
     private static final String CPUFREQ_DIR = "/sys/devices/system/cpu/cpufreq";
     private static final String FILE_SCALING_MAX_FREQ = "scaling_max_freq";
@@ -85,9 +89,21 @@ final class BatterySaverCustomActions extends ContentObserver {
     private final ArrayMap<String, Long> mPreviousCpuMaxFreqs = new ArrayMap<>();
     private final ArrayMap<String, Long> mAppliedCpuMaxFreqs = new ArrayMap<>();
     private final ArrayMap<Integer, Long> mPreviousPowerNetworkTypes = new ArrayMap<>();
+    private final ArrayMap<Integer, Long> mAppliedPowerNetworkTypes = new ArrayMap<>();
     private final ArrayMap<Integer, Long> mPreviousScreenTimeouts = new ArrayMap<>();
 
     private final ContentObserver mScreenTimeoutObserver;
+    private final SubscriptionManager.OnSubscriptionsChangedListener mSubscriptionsChangedListener =
+            new SubscriptionManager.OnSubscriptionsChangedListener() {
+                @Override
+                public void onSubscriptionsChanged() {
+                    if (mFullBatterySaverEnabled
+                            && Settings.Global.getInt(
+                                    mResolver, SETTING_DISABLE_5G, 0) != 0) {
+                        update5g(true);
+                    }
+                }
+            };
     private final BroadcastReceiver mUserSwitchReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -106,7 +122,13 @@ final class BatterySaverCustomActions extends ContentObserver {
         mScreenTimeoutObserver = new ContentObserver(handler) {
             @Override
             public void onChange(boolean selfChange) {
-                handleScreenTimeoutChanged();
+                handleScreenTimeoutChanged(ActivityManager.getCurrentUser());
+            }
+
+            @Override
+            public void onChange(boolean selfChange, Collection<android.net.Uri> uris,
+                    int flags, UserHandle user) {
+                handleScreenTimeoutChanged(user.getIdentifier());
             }
         };
     }
@@ -123,8 +145,14 @@ final class BatterySaverCustomActions extends ContentObserver {
                 mScreenTimeoutObserver, UserHandle.USER_ALL);
         final IntentFilter userFilter = new IntentFilter(Intent.ACTION_USER_SWITCHED);
         mContext.registerReceiverForAllUsers(mUserSwitchReceiver, userFilter, null, mHandler);
+        if (mSubscriptionManager != null) {
+            mSubscriptionManager.addOnSubscriptionsChangedListener(
+                    command -> mHandler.post(command), mSubscriptionsChangedListener);
+        }
         loadCpuMaxFreqBackups();
+        loadCpuAppliedFreqs();
         loadNetworkTypeBackups();
+        loadAppliedNetworkTypeBackups();
         loadScreenTimeoutBackups();
     }
 
@@ -137,21 +165,47 @@ final class BatterySaverCustomActions extends ContentObserver {
         apply();
     }
 
+    void reapplyCpuLimit() {
+        updateCpuLimit(getCpuLimitOverride());
+    }
+
     @Override
     public void onChange(boolean selfChange) {
         apply();
     }
 
-    private void apply() {
-        final int cpuLimitPercent = mFullBatterySaverEnabled
-                ? Settings.Global.getInt(mResolver, SETTING_CPU_LIMIT_PERCENT, -1) : -1;
-        final boolean disable5g = mFullBatterySaverEnabled
-                && Settings.Global.getInt(mResolver, SETTING_DISABLE_5G, 0) != 0;
-        final int screenTimeoutMs = getScreenTimeoutOverride();
+    @Override
+    public void onChange(boolean selfChange, android.net.Uri uri) {
+        if (uri == null) {
+            apply();
+            return;
+        }
 
-        updateCpuLimit(cpuLimitPercent);
-        update5g(disable5g);
-        updateScreenTimeout(screenTimeoutMs);
+        if (Settings.Global.getUriFor(SETTING_CPU_LIMIT_PERCENT).equals(uri)) {
+            updateCpuLimit(getCpuLimitOverride());
+        } else if (Settings.Global.getUriFor(SETTING_DISABLE_5G).equals(uri)) {
+            update5g(getDisable5gOverride());
+        } else if (Settings.Global.getUriFor(SETTING_SCREEN_TIMEOUT).equals(uri)) {
+            updateScreenTimeout(getScreenTimeoutOverride());
+        } else {
+            apply();
+        }
+    }
+
+    private void apply() {
+        updateCpuLimit(getCpuLimitOverride());
+        update5g(getDisable5gOverride());
+        updateScreenTimeout(getScreenTimeoutOverride());
+    }
+
+    private int getCpuLimitOverride() {
+        return mFullBatterySaverEnabled
+                ? Settings.Global.getInt(mResolver, SETTING_CPU_LIMIT_PERCENT, -1) : -1;
+    }
+
+    private boolean getDisable5gOverride() {
+        return mFullBatterySaverEnabled
+                && Settings.Global.getInt(mResolver, SETTING_DISABLE_5G, 0) != 0;
     }
 
     private int getScreenTimeoutOverride() {
@@ -226,6 +280,7 @@ final class BatterySaverCustomActions extends ContentObserver {
         }
 
         boolean backupChanged = false;
+        boolean appliedChanged = false;
         for (File policyDir : policyDirs) {
             final File scalingMaxFile = new File(policyDir, FILE_SCALING_MAX_FREQ);
             if (!scalingMaxFile.exists()) {
@@ -270,11 +325,12 @@ final class BatterySaverCustomActions extends ContentObserver {
 
                 if (currentMax != target) {
                     FileUtils.stringToFile(scalingMaxFile, Long.toString(target));
-                    mAppliedCpuMaxFreqs.put(policyName, target);
+                    final Long oldApplied = mAppliedCpuMaxFreqs.put(policyName, target);
+                    appliedChanged |= oldApplied == null || oldApplied != target;
                 } else if (!stillOwnsCurrentValue) {
                     // The current value belongs to another component; don't claim ownership just
                     // because it happens to satisfy our requested cap.
-                    mAppliedCpuMaxFreqs.remove(policyName);
+                    appliedChanged |= mAppliedCpuMaxFreqs.remove(policyName) != null;
                 }
             } catch (IOException | NumberFormatException e) {
                 Slog.w(TAG, "Unable to cap CPU frequency for " + policyDir, e);
@@ -283,6 +339,9 @@ final class BatterySaverCustomActions extends ContentObserver {
 
         if (backupChanged) {
             persistCpuMaxFreqBackups();
+        }
+        if (appliedChanged) {
+            persistCpuAppliedFreqs();
         }
     }
 
@@ -326,10 +385,14 @@ final class BatterySaverCustomActions extends ContentObserver {
 
     private void restoreCpuMaxFreqs(boolean clearBackup) {
         if (mPreviousCpuMaxFreqs.isEmpty()) {
-            mAppliedCpuMaxFreqs.clear();
+            if (!mAppliedCpuMaxFreqs.isEmpty()) {
+                mAppliedCpuMaxFreqs.clear();
+                persistCpuAppliedFreqs();
+            }
             return;
         }
 
+        boolean appliedChanged = false;
         final ArrayList<String> completed = new ArrayList<>();
         for (Map.Entry<String, Long> entry : mPreviousCpuMaxFreqs.entrySet()) {
             final String policyName = entry.getKey();
@@ -340,7 +403,7 @@ final class BatterySaverCustomActions extends ContentObserver {
                     if (clearBackup) {
                         completed.add(policyName);
                     }
-                    mAppliedCpuMaxFreqs.remove(policyName);
+                    appliedChanged |= mAppliedCpuMaxFreqs.remove(policyName) != null;
                     continue;
                 }
 
@@ -358,7 +421,7 @@ final class BatterySaverCustomActions extends ContentObserver {
                 if (currentMax != appliedMax) {
                     Slog.i(TAG, "Skipping CPU max restore for " + policyName
                             + "; current value changed from our applied cap");
-                    mAppliedCpuMaxFreqs.remove(policyName);
+                    appliedChanged |= mAppliedCpuMaxFreqs.remove(policyName) != null;
                     if (clearBackup) {
                         completed.add(policyName);
                     }
@@ -366,7 +429,7 @@ final class BatterySaverCustomActions extends ContentObserver {
                 }
 
                 FileUtils.stringToFile(scalingMaxFile, Long.toString(entry.getValue()));
-                mAppliedCpuMaxFreqs.remove(policyName);
+                appliedChanged |= mAppliedCpuMaxFreqs.remove(policyName) != null;
                 if (clearBackup) {
                     completed.add(policyName);
                 }
@@ -380,6 +443,9 @@ final class BatterySaverCustomActions extends ContentObserver {
                 mPreviousCpuMaxFreqs.remove(policy);
             }
             persistCpuMaxFreqBackups();
+        }
+        if (appliedChanged) {
+            persistCpuAppliedFreqs();
         }
     }
 
@@ -416,27 +482,43 @@ final class BatterySaverCustomActions extends ContentObserver {
         }
 
         boolean backupChanged = false;
+        boolean appliedChanged = false;
         for (int subId : subscriptionIds) {
             final TelephonyManager telephony = mTelephonyManager.createForSubscriptionId(subId);
             try {
-                long previous = mPreviousPowerNetworkTypes.containsKey(subId)
-                        ? mPreviousPowerNetworkTypes.get(subId)
-                        : telephony.getAllowedNetworkTypesForReason(
-                                TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER);
-
-                if (previous < 0) {
+                final long current = telephony.getAllowedNetworkTypesForReason(
+                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER);
+                if (current < 0) {
                     continue;
                 }
 
-                if (!mPreviousPowerNetworkTypes.containsKey(subId)) {
-                    mPreviousPowerNetworkTypes.put(subId, previous);
-                    backupChanged = true;
+                final Long lastApplied = mAppliedPowerNetworkTypes.get(subId);
+                final boolean stillOwnsCurrentValue =
+                        lastApplied != null && current == lastApplied;
+                final long withoutNr = current & ~TelephonyManager.NETWORK_TYPE_BITMASK_NR;
+
+                if (!stillOwnsCurrentValue && withoutNr == current) {
+                    // NR is already disabled by another component and Battery Saver does not own
+                    // this mask. There is nothing to apply or restore.
+                    backupChanged |= mPreviousPowerNetworkTypes.remove(subId) != null;
+                    appliedChanged |= mAppliedPowerNetworkTypes.remove(subId) != null;
+                    continue;
                 }
 
-                final long withoutNr =
-                        previous & ~TelephonyManager.NETWORK_TYPE_BITMASK_NR;
+                if (!stillOwnsCurrentValue) {
+                    final Long previous = mPreviousPowerNetworkTypes.put(subId, current);
+                    backupChanged |= previous == null || previous != current;
+                    appliedChanged |= mAppliedPowerNetworkTypes.remove(subId) != null;
+                }
+
+                if (withoutNr == current) {
+                    continue;
+                }
+
                 telephony.setAllowedNetworkTypesForReason(
                         TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER, withoutNr);
+                final Long oldApplied = mAppliedPowerNetworkTypes.put(subId, withoutNr);
+                appliedChanged |= oldApplied == null || oldApplied != withoutNr;
             } catch (IllegalArgumentException | IllegalStateException
                     | SecurityException | UnsupportedOperationException e) {
                 Slog.w(TAG, "Unable to disable 5G for subscription " + subId, e);
@@ -446,32 +528,57 @@ final class BatterySaverCustomActions extends ContentObserver {
         if (backupChanged) {
             persistNetworkTypeBackups();
         }
+        if (appliedChanged) {
+            persistAppliedNetworkTypeBackups();
+        }
     }
 
     private void restoreNetworkTypes() {
         if (mPreviousPowerNetworkTypes.isEmpty() || mTelephonyManager == null) {
+            if (!mAppliedPowerNetworkTypes.isEmpty()) {
+                mAppliedPowerNetworkTypes.clear();
+                persistAppliedNetworkTypeBackups();
+            }
             return;
         }
 
-        final ArrayList<Integer> restored = new ArrayList<>();
+        final ArrayList<Integer> completed = new ArrayList<>();
+        boolean appliedChanged = false;
         for (Map.Entry<Integer, Long> entry : mPreviousPowerNetworkTypes.entrySet()) {
             final int subId = entry.getKey();
             try {
-                mTelephonyManager.createForSubscriptionId(subId)
-                        .setAllowedNetworkTypesForReason(
-                                TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER,
-                                entry.getValue());
-                restored.add(subId);
+                final TelephonyManager telephony =
+                        mTelephonyManager.createForSubscriptionId(subId);
+                final long current = telephony.getAllowedNetworkTypesForReason(
+                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER);
+                final Long applied = mAppliedPowerNetworkTypes.get(subId);
+
+                if (applied == null || current != applied) {
+                    // The current mask is no longer one Battery Saver owns. Do not overwrite a
+                    // newer user/vendor/telephony decision with our stale pre-saver backup.
+                    appliedChanged |= mAppliedPowerNetworkTypes.remove(subId) != null;
+                    completed.add(subId);
+                    continue;
+                }
+
+                telephony.setAllowedNetworkTypesForReason(
+                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER,
+                        entry.getValue());
+                appliedChanged |= mAppliedPowerNetworkTypes.remove(subId) != null;
+                completed.add(subId);
             } catch (IllegalArgumentException | IllegalStateException
                     | SecurityException | UnsupportedOperationException e) {
                 Slog.w(TAG, "Unable to restore network types for subscription " + subId, e);
             }
         }
 
-        for (int subId : restored) {
+        for (int subId : completed) {
             mPreviousPowerNetworkTypes.remove(subId);
         }
         persistNetworkTypeBackups();
+        if (appliedChanged) {
+            persistAppliedNetworkTypeBackups();
+        }
     }
 
     private void updateScreenTimeout(int timeoutMs) {
@@ -492,7 +599,7 @@ final class BatterySaverCustomActions extends ContentObserver {
                 mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
     }
 
-    private void handleScreenTimeoutChanged() {
+    private void handleScreenTimeoutChanged(int changedUserId) {
         if (!mFullBatterySaverEnabled) {
             return;
         }
@@ -502,19 +609,24 @@ final class BatterySaverCustomActions extends ContentObserver {
             return;
         }
 
-        final int userId = ActivityManager.getCurrentUser();
+        final int userId = changedUserId >= 0
+                ? changedUserId : ActivityManager.getCurrentUser();
         final long currentTimeout = Settings.System.getLongForUser(
                 mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
         if (currentTimeout == timeoutMs) {
             return;
         }
 
-        // Preserve changes made while Battery Saver is active so they become the normal
-        // timeout after Battery Saver exits, then keep the temporary saver timeout applied.
+        // Preserve the normal timeout selected by the user while Battery Saver is active.
+        // Background users keep their new normal value untouched; if/when they become active,
+        // ACTION_USER_SWITCHED applies the temporary saver override for that user.
         mPreviousScreenTimeouts.put(userId, currentTimeout);
         persistScreenTimeoutBackups();
-        Settings.System.putLongForUser(
-                mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
+
+        if (userId == ActivityManager.getCurrentUser()) {
+            Settings.System.putLongForUser(
+                    mResolver, Settings.System.SCREEN_OFF_TIMEOUT, timeoutMs, userId);
+        }
     }
 
     private void restoreScreenTimeout() {
@@ -635,6 +747,60 @@ final class BatterySaverCustomActions extends ContentObserver {
                 mResolver, SETTING_CPU_MAX_FREQ_BACKUP, serialized.toString());
     }
 
+    private void loadCpuAppliedFreqs() {
+        mAppliedCpuMaxFreqs.clear();
+        final String serialized = Settings.Global.getString(
+                mResolver, SETTING_CPU_APPLIED_FREQ_BACKUP);
+        if (serialized == null || serialized.isEmpty()) {
+            return;
+        }
+
+        boolean droppedEntry = false;
+        for (String item : serialized.split(";")) {
+            final int separator = item.indexOf('=');
+            if (separator <= 0 || separator >= item.length() - 1) {
+                droppedEntry = true;
+                continue;
+            }
+            try {
+                final String policy = item.substring(0, separator);
+                final long maxFreq = Long.parseLong(item.substring(separator + 1));
+                final File scalingMaxFile = new File(
+                        new File(CPUFREQ_DIR, policy), FILE_SCALING_MAX_FREQ);
+                final long currentMax = readLong(scalingMaxFile);
+                if (maxFreq > 0 && currentMax == maxFreq
+                        && mPreviousCpuMaxFreqs.containsKey(policy)) {
+                    mAppliedCpuMaxFreqs.put(policy, maxFreq);
+                } else {
+                    droppedEntry = true;
+                }
+            } catch (IOException | NumberFormatException ignored) {
+                droppedEntry = true;
+            }
+        }
+
+        if (droppedEntry) {
+            persistCpuAppliedFreqs();
+        }
+    }
+
+    private void persistCpuAppliedFreqs() {
+        if (mAppliedCpuMaxFreqs.isEmpty()) {
+            Settings.Global.putString(mResolver, SETTING_CPU_APPLIED_FREQ_BACKUP, null);
+            return;
+        }
+
+        final StringBuilder serialized = new StringBuilder();
+        for (Map.Entry<String, Long> entry : mAppliedCpuMaxFreqs.entrySet()) {
+            if (serialized.length() > 0) {
+                serialized.append(';');
+            }
+            serialized.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        Settings.Global.putString(
+                mResolver, SETTING_CPU_APPLIED_FREQ_BACKUP, serialized.toString());
+    }
+
     private void loadNetworkTypeBackups() {
         mPreviousPowerNetworkTypes.clear();
         final String serialized = Settings.Global.getString(mResolver, SETTING_5G_BACKUP);
@@ -655,6 +821,83 @@ final class BatterySaverCustomActions extends ContentObserver {
                 // Ignore malformed stale entries.
             }
         }
+    }
+
+    private void loadAppliedNetworkTypeBackups() {
+        mAppliedPowerNetworkTypes.clear();
+        if (mTelephonyManager == null) {
+            mPreviousPowerNetworkTypes.clear();
+            Settings.Global.putString(mResolver, SETTING_5G_BACKUP, null);
+            Settings.Global.putString(mResolver, SETTING_5G_APPLIED_BACKUP, null);
+            return;
+        }
+
+        final String serialized = Settings.Global.getString(
+                mResolver, SETTING_5G_APPLIED_BACKUP);
+        if (serialized == null || serialized.isEmpty()) {
+            return;
+        }
+
+        boolean previousChanged = false;
+        boolean appliedChanged = false;
+        for (String item : serialized.split(";")) {
+            final int separator = item.indexOf('=');
+            if (separator <= 0 || separator >= item.length() - 1) {
+                appliedChanged = true;
+                continue;
+            }
+            try {
+                final int subId = Integer.parseInt(item.substring(0, separator));
+                final long appliedMask = Long.parseLong(item.substring(separator + 1));
+                if (!mPreviousPowerNetworkTypes.containsKey(subId)) {
+                    appliedChanged = true;
+                    continue;
+                }
+
+                final long current = mTelephonyManager.createForSubscriptionId(subId)
+                        .getAllowedNetworkTypesForReason(
+                                TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER);
+                if (current == appliedMask) {
+                    mAppliedPowerNetworkTypes.put(subId, appliedMask);
+                } else {
+                    // Ownership did not survive the restart. Drop both entries so a later restore
+                    // cannot overwrite the newer mask.
+                    mPreviousPowerNetworkTypes.remove(subId);
+                    previousChanged = true;
+                    appliedChanged = true;
+                }
+            } catch (NumberFormatException ignored) {
+                appliedChanged = true;
+            } catch (IllegalArgumentException | IllegalStateException | SecurityException
+                    | UnsupportedOperationException e) {
+                Slog.w(TAG, "Unable to verify persisted 5G ownership", e);
+                appliedChanged = true;
+            }
+        }
+
+        if (previousChanged) {
+            persistNetworkTypeBackups();
+        }
+        if (appliedChanged) {
+            persistAppliedNetworkTypeBackups();
+        }
+    }
+
+    private void persistAppliedNetworkTypeBackups() {
+        if (mAppliedPowerNetworkTypes.isEmpty()) {
+            Settings.Global.putString(mResolver, SETTING_5G_APPLIED_BACKUP, null);
+            return;
+        }
+
+        final StringBuilder serialized = new StringBuilder();
+        for (Map.Entry<Integer, Long> entry : mAppliedPowerNetworkTypes.entrySet()) {
+            if (serialized.length() > 0) {
+                serialized.append(';');
+            }
+            serialized.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        Settings.Global.putString(
+                mResolver, SETTING_5G_APPLIED_BACKUP, serialized.toString());
     }
 
     private void persistNetworkTypeBackups() {

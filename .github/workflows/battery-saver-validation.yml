@@ -1,0 +1,38 @@
+name: Battery Saver validation
+
+on:
+  pull_request:
+    branches:
+      - cnb
+      - "fix/battery-saver-*"
+      - "perf/battery-saver-*"
+    paths:
+      - "services/core/java/com/android/server/power/batterysaver/**"
+      - "services/tests/servicestests/src/com/android/server/power/batterysaver/**"
+      - "tools/validate_battery_saver.py"
+      - ".github/workflows/battery-saver-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Battery Saver invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Validate checker syntax
+        run: python3 -m py_compile tools/validate_battery_saver.py
+
+      - name: Validate Battery Saver
+        run: python3 tools/validate_battery_saver.py
+
+      - name: Check patch whitespace
+        run: git diff --check HEAD^ HEAD
