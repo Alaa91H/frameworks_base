@@ -433,9 +433,11 @@ public class BatterySaverController implements BatterySaverPolicyListener {
 
         final boolean enabled;
         final boolean fullEnabled;
+        final boolean fullPreviouslyEnabled;
         final boolean isInteractive = getPowerManager().isInteractive();
 
         synchronized (mLock) {
+            fullPreviouslyEnabled = mFullPreviouslyEnabled;
             fullEnabled = getFullEnabledLocked();
             enabled = fullEnabled || getAdaptiveEnabledLocked();
 
@@ -456,10 +458,11 @@ public class BatterySaverController implements BatterySaverPolicyListener {
             mIsInteractive = isInteractive;
         }
 
-        // Capture/apply custom full-saver state before LOW_POWER is sent to the Power HAL so
-        // direct CPU limits can preserve the pre-saver scaling_max_freq values.
-        if (fullEnabled) {
-            mCustomActions.setFullBatterySaverEnabled(true);
+        // Snapshot the pre-full-saver CPU state exactly once, before LOW_POWER is sent to the
+        // Power HAL. This keeps a correct restore point even if the custom CPU limit is enabled
+        // later while full Battery Saver is already active.
+        if (fullEnabled && !fullPreviouslyEnabled) {
+            mCustomActions.prepareForLowPowerTransition();
         }
 
         final PowerManagerInternal pmi = LocalServices.getService(PowerManagerInternal.class);
@@ -467,9 +470,15 @@ public class BatterySaverController implements BatterySaverPolicyListener {
             pmi.setPowerMode(Mode.LOW_POWER, isEnabled());
         }
 
-        // Re-apply after the Power HAL transition so the optional CPU percentage cap remains the
-        // final limit. On exit, restore values only after LOW_POWER has been disabled.
-        mCustomActions.setFullBatterySaverEnabled(fullEnabled);
+        // On a full-saver transition, apply all custom actions once after the Power HAL.
+        // For same-state LOW_POWER re-assertions (for example screen interactive changes), only
+        // re-apply the CPU cap because the HAL may have rewritten cpufreq state. 5G and timeout
+        // remain event-driven by their own settings/subscription observers.
+        if (fullEnabled != fullPreviouslyEnabled) {
+            mCustomActions.setFullBatterySaverEnabled(fullEnabled);
+        } else if (fullEnabled) {
+            mCustomActions.reapplyCpuLimit();
+        }
 
         updateBatterySavingStats();
 
