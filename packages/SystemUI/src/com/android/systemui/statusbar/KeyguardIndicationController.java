@@ -167,6 +167,16 @@ public class KeyguardIndicationController {
     public static final String TAG = "KeyguardIndication";
     private static final boolean DEBUG_CHARGING_SPEED = false;
 
+    // Keep these local to SystemUI so this feature stays independent from framework API changes.
+    private static final String LOCKSCREEN_BATTERY_SHOW_CURRENT =
+            "lockscreen_battery_show_current";
+    private static final String LOCKSCREEN_BATTERY_SHOW_POWER =
+            "lockscreen_battery_show_power";
+    private static final String LOCKSCREEN_BATTERY_SHOW_VOLTAGE =
+            "lockscreen_battery_show_voltage";
+    private static final String LOCKSCREEN_BATTERY_SHOW_TEMPERATURE =
+            "lockscreen_battery_show_temperature";
+
     private static final int MSG_SHOW_ACTION_TO_UNLOCK = 1;
     private static final int MSG_RESET_ERROR_MESSAGE_ON_SCREEN_ON = 2;
     private static final int MSG_SHOW_RECOGNIZING_FACE = 3;
@@ -1455,26 +1465,33 @@ public class KeyguardIndicationController {
         }
 
         String batteryInfo = "";
-        boolean showbatteryInfo = Settings.System.getIntForUser(mContext.getContentResolver(),
-            Settings.System.LOCKSCREEN_BATTERY_INFO, 1, UserHandle.USER_CURRENT) == 1;
-         if (showbatteryInfo) {
+        final boolean showBatteryInfo = Settings.System.getIntForUser(
+                mContext.getContentResolver(), Settings.System.LOCKSCREEN_BATTERY_INFO, 1,
+                UserHandle.USER_CURRENT) == 1;
+        if (showBatteryInfo) {
+            final boolean showCurrent = isBatteryDetailEnabled(LOCKSCREEN_BATTERY_SHOW_CURRENT);
+            final boolean showPower = isBatteryDetailEnabled(LOCKSCREEN_BATTERY_SHOW_POWER);
+            final boolean showVoltage = isBatteryDetailEnabled(LOCKSCREEN_BATTERY_SHOW_VOLTAGE);
+            final boolean showTemperature =
+                    isBatteryDetailEnabled(LOCKSCREEN_BATTERY_SHOW_TEMPERATURE);
+
             List<String> chargingDetails = new ArrayList<>();
-            if (mChargingCurrent >= 1_000_000f) {
+            if (showCurrent && mChargingCurrent >= 1_000_000f) {
                 chargingDetails.add(String.format(Locale.US, "%.1f",
                         (mChargingCurrent / 1_000_000f)) + "A");
-            } else if (mChargingCurrent > 0) {
+            } else if (showCurrent && mChargingCurrent > 0) {
                 chargingDetails.add(String.format(Locale.US, "%.0f",
                         (mChargingCurrent / 1000f)) + "mA");
             }
-            if (mChargingWattage > 0) {
+            if (showPower && mChargingWattage > 0) {
                 chargingDetails.add(String.format(Locale.US, "%.1f",
                         (mChargingWattage / 1_000_000f)) + "W");
             }
-            if (mChargingVoltage > 0) {
+            if (showVoltage && mChargingVoltage > 0) {
                 chargingDetails.add(String.format(Locale.US, "%.1f",
                         (mChargingVoltage / 1000000f)) + "V");
             }
-            if (mTemperature > 0) {
+            if (showTemperature && mTemperature > 0) {
                 chargingDetails.add(String.format(Locale.US, "%.1f",
                         (mTemperature / 10f)) + "°C");
             }
@@ -1493,6 +1510,11 @@ public class KeyguardIndicationController {
             String chargingText =  mContext.getResources().getString(chargingId, percentage);
             return chargingText + batteryInfo;
         }
+    }
+
+    private boolean isBatteryDetailEnabled(String key) {
+        return Settings.System.getIntForUser(
+                mContext.getContentResolver(), key, 1, UserHandle.USER_CURRENT) == 1;
     }
 
     public void setStatusBarKeyguardViewManager(
