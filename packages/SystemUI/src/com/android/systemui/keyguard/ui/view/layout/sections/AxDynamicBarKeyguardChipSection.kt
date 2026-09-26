@@ -8,11 +8,13 @@ import com.android.axion.compose.host.AxComposeView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.compose.theme.PlatformTheme
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
 import com.android.systemui.axdynamicbar.ui.compose.AxDynamicBarKeyguardChip
+import com.android.systemui.axdynamicbar.ui.compose.DynamicBarCutoutHost
 import com.android.systemui.keyguard.domain.interactor.KeyguardClockInteractor
 import com.android.systemui.keyguard.shared.model.ClockSize
 import com.android.systemui.keyguard.shared.model.KeyguardSection
@@ -41,12 +43,12 @@ private fun extraBottomMarginPx(context: Context): Int =
 private val HIDDEN_VIEW_IDS = listOf(
     R.id.shared_notification_container,
     R.id.notificationShelf,
+    R.id.now_playing_view,
     R.id.bc_smartspace_view,
     R.id.smartspace_card_pager,
     R.id.smartspace_page_indicator,
     R.id.keyguard_slice_view,
     R.id.keyguard_weather_area,
-    R.id.now_playing_view,
 )
 
 private fun Float.dpToPx(context: Context): Int =
@@ -80,7 +82,15 @@ constructor(
 
         composeView.setContent {
             PlatformTheme {
-                AxDynamicBarKeyguardChip(viewModel = viewModel)
+                val expanded by viewModel.isKeyguardExpanded.collectAsStateWithLifecycle()
+                if (expanded) {
+                    AxDynamicBarKeyguardChip(viewModel = viewModel)
+                } else {
+                    DynamicBarCutoutHost(
+                        viewModel = viewModel,
+                        keyguardMode = true,
+                    )
+                }
             }
         }
 
@@ -178,35 +188,34 @@ constructor(
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
         val expanded = viewModel.isKeyguardExpanded.value
-        val lowUdfps = viewModel.isLowUdfps.value
         val bottomProtectionPx = EXPANDED_BOTTOM_PROTECTION_DP.dpToPx(context)
-        val chipAboveLockPx = CHIP_ABOVE_LOCK_MARGIN_DP.dpToPx(context)
-        val extraBottomPx = extraBottomMarginPx(context)
         val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
         constraintSet.apply {
-            when {
-                expanded -> {
-                    constrainWidth(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
-                    constrainHeight(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
-                    connect(chipViewId, ConstraintSet.TOP, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL, ConstraintSet.BOTTOM)
-                    connect(chipViewId, ConstraintSet.BOTTOM, R.id.device_entry_icon_view, ConstraintSet.TOP, bottomProtectionPx)
-                    connect(chipViewId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
-                    connect(chipViewId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
-                }
-                lowUdfps -> {
-                    constrainWidth(chipViewId, wrap)
-                    constrainHeight(chipViewId, wrap)
-                    connect(chipViewId, ConstraintSet.BOTTOM, R.id.device_entry_icon_view, ConstraintSet.TOP, chipAboveLockPx + extraBottomPx)
-                    connect(chipViewId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
-                    connect(chipViewId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
-                }
-                else -> {
-                    constrainWidth(chipViewId, wrap)
-                    constrainHeight(chipViewId, wrap)
-                    connect(chipViewId, ConstraintSet.BOTTOM, R.id.start_button, ConstraintSet.BOTTOM, extraBottomPx)
-                    connect(chipViewId, ConstraintSet.START, R.id.start_button, ConstraintSet.END)
-                    connect(chipViewId, ConstraintSet.END, R.id.end_button, ConstraintSet.START)
-                }
+            if (expanded) {
+                constrainWidth(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
+                constrainHeight(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
+                connect(
+                    chipViewId,
+                    ConstraintSet.TOP,
+                    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                    ConstraintSet.BOTTOM,
+                )
+                connect(
+                    chipViewId,
+                    ConstraintSet.BOTTOM,
+                    R.id.device_entry_icon_view,
+                    ConstraintSet.TOP,
+                    bottomProtectionPx,
+                )
+                connect(chipViewId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+                connect(chipViewId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            } else {
+                constrainWidth(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
+                constrainHeight(chipViewId, wrap)
+                connect(chipViewId, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+                connect(chipViewId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+                connect(chipViewId, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+                clear(chipViewId, ConstraintSet.BOTTOM)
             }
         }
     }
@@ -231,29 +240,18 @@ constructor(
 
     private fun applyCollapsedLp(composeView: View, lowUdfps: Boolean) {
         val lp = composeView.layoutParams as ConstraintLayout.LayoutParams
-        val extraBottomPx = extraBottomMarginPx(context)
-        lp.width = ViewGroup.LayoutParams.WRAP_CONTENT
+        lp.width = 0
         lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
         lp.topMargin = 0
-        lp.topToTop = UNSET
+        lp.bottomMargin = 0
+        lp.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
         lp.topToBottom = UNSET
-        if (lowUdfps) {
-            lp.bottomToTop = R.id.device_entry_icon_view
-            lp.bottomToBottom = UNSET
-            lp.bottomMargin = CHIP_ABOVE_LOCK_MARGIN_DP.dpToPx(context) + extraBottomPx
-            lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
-            lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
-            lp.startToEnd = UNSET
-            lp.endToStart = UNSET
-        } else {
-            lp.bottomToBottom = R.id.start_button
-            lp.bottomToTop = UNSET
-            lp.bottomMargin = extraBottomPx
-            lp.startToEnd = R.id.start_button
-            lp.endToStart = R.id.end_button
-            lp.startToStart = UNSET
-            lp.endToEnd = UNSET
-        }
+        lp.bottomToTop = UNSET
+        lp.bottomToBottom = UNSET
+        lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+        lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+        lp.startToEnd = UNSET
+        lp.endToStart = UNSET
         composeView.layoutParams = lp
     }
 

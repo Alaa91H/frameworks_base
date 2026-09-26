@@ -94,7 +94,7 @@ import com.android.systemui.scene.ui.view.WindowRootView
 import com.android.systemui.shade.ui.composable.VariableDayDate
 import com.android.systemui.statusbar.StatusBarAlwaysUseRegionSampling
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
-import com.android.systemui.axdynamicbar.ui.compose.AxDynamicBarChip
+import com.android.systemui.axdynamicbar.ui.compose.DynamicBarCutoutHost
 import com.android.systemui.statusbar.chips.ui.compose.OngoingActivityChips
 import com.android.systemui.statusbar.core.NewStatusBarIcons
 import com.android.systemui.statusbar.core.StatusBarEventForwardingModernization
@@ -239,6 +239,7 @@ fun StatusBarRoot(
     var touchableExclusionRegionDisposableHandle: DisposableHandle? = null
 
     val touchSlop = LocalViewConfiguration.current.touchSlop
+    var dynamicBarOccupiedViews by remember { mutableStateOf<List<View>>(emptyList()) }
 
     // Let the DesktopStatusBar compose all the UI if [useDesktopStatusBar] is true.
     if (StatusBarForDesktop.isEnabled && statusBarViewModel.useDesktopStatusBar) {
@@ -268,13 +269,19 @@ fun StatusBarRoot(
                 val phoneStatusBarView =
                     inflater.inflate(R.layout.status_bar, parent, false) as PhoneStatusBarView
 
+                dynamicBarOccupiedViews =
+                    listOf(
+                        phoneStatusBarView.requireViewById(R.id.status_bar_start_side_content),
+                        phoneStatusBarView.requireViewById(R.id.status_bar_end_side_content),
+                        phoneStatusBarView.requireViewById(R.id.clock_center),
+                    )
+
                 addStartSideComposable(
                     phoneStatusBarView = phoneStatusBarView,
                     clockViewModelFactory = clockViewModelFactory,
                     statusBarViewModel = statusBarViewModel,
                     iconViewStore = iconViewStore,
                     appHandlesViewModel = appHandlesViewModel,
-                    axDynamicBarChipViewModel = axDynamicBarChipViewModel,
                     context = context,
                 )
 
@@ -385,8 +392,21 @@ fun StatusBarRoot(
                     .thenIf(headlineViewModel != null) {
                         Modifier.drawWithHeadlineScrim(headlineViewModel!!)
                     },
-            onRelease = { touchableExclusionRegionDisposableHandle?.dispose() },
+            onRelease = {
+                touchableExclusionRegionDisposableHandle?.dispose()
+                dynamicBarOccupiedViews = emptyList()
+            },
         )
+
+        val axDynamicBarEnabled by
+            axDynamicBarChipViewModel.interactor.settings.isEnabled.collectAsState()
+        if (axDynamicBarEnabled) {
+            DynamicBarCutoutHost(
+                viewModel = axDynamicBarChipViewModel,
+                occupiedViews = dynamicBarOccupiedViews,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
+        }
 
         if (StatusBarHeadline.isEnabled && headlineViewModel != null) {
             val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -403,7 +423,6 @@ private fun addStartSideComposable(
     statusBarViewModel: HomeStatusBarViewModel,
     iconViewStore: NotificationIconContainerViewBinder.IconViewStore?,
     appHandlesViewModel: AppHandlesViewModel,
-    axDynamicBarChipViewModel: AxDynamicBarChipViewModel,
     context: Context,
 ) {
     val startSideExceptHeadsUp =
@@ -514,14 +533,6 @@ private fun addStartSideComposable(
                             density = density,
                         )
                     }
-
-                val axEnabled by axDynamicBarChipViewModel.interactor.settings.isEnabled.collectAsState()
-                if (axEnabled) {
-                    AxDynamicBarChip(
-                        viewModel = axDynamicBarChipViewModel,
-                        modifier = Modifier.widthIn(max = chipsMaxWidth),
-                    )
-                }
                 val chipsVisibilityModel = statusBarViewModel.ongoingActivityChips
                 if (chipsVisibilityModel.areChipsAllowed) {
                     OngoingActivityChips(

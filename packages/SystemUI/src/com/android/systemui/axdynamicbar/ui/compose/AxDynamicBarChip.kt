@@ -55,6 +55,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.dimensionResource
 import com.android.compose.animation.Expandable
@@ -62,6 +63,7 @@ import com.android.compose.animation.rememberExpandableController
 import com.android.systemui.animation.Expandable as SystemUiExpandable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.shape.CircleShape
@@ -107,7 +109,7 @@ fun AxDynamicBarChip(
     val chipStyle by viewModel.chipStyle.collectAsStateWithLifecycle()
 
     var toggleCount by remember { mutableIntStateOf(0) }
-    
+
     val carrierName = if (isOnKeyguard && ignoreKeyguard) keyguardCarrier.takeIf { it.isNotBlank() } else null
     val chipTextMaxWidth = dimensionResource(R.dimen.ongoing_activity_chip_max_text_width)
     val screenWidthPx = with(LocalDensity.current) {
@@ -115,6 +117,7 @@ fun AxDynamicBarChip(
     }
 
     val touchSlop = LocalViewConfiguration.current.touchSlop
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val expandableController = rememberExpandableController(color = Color.Transparent, shape = ChipShape)
     var currentExpandable by remember { mutableStateOf<SystemUiExpandable?>(null) }
 
@@ -127,24 +130,25 @@ fun AxDynamicBarChip(
         modifier = modifier
             .padding(start = 4.dp, end = 2.dp)
             .widthIn(min = 25.dp, max = 90.dp)
-            .pointerInput(viewModel) {
+            .pointerInput(viewModel, isRtl) {
                 awaitEachGesture {
                     val down = awaitFirstDown(pass = PointerEventPass.Initial)
-                    
+
                     val startX = down.position.x
                     val startY = down.position.y
                     var dragging = false
                     var totalDx = 0f
-                    var decided = false 
+                    var decided = false
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val change = event.changes.firstOrNull() ?: break
                         if (!change.pressed) {
-                            
+
                             if (dragging) {
                                 change.consume()
-                                if (totalDx > 0) viewModel.cyclePrev()
-                                else viewModel.cycleNext()
+                                val next = if (isRtl) totalDx > 0f else totalDx < 0f
+                                if (next) viewModel.cycleNext()
+                                else viewModel.cyclePrev()
                             } else if (!decided) {
 
                                 change.consume()
@@ -162,20 +166,20 @@ fun AxDynamicBarChip(
                                     if (!wasExpanded) toggleCount++
                                 }
                             }
-                            
+
                             break
                         }
                         val dx = change.position.x - startX
                         val dy = change.position.y - startY
                         if (!decided && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
                             if (abs(dx) >= abs(dy)) {
-                                
+
                                 decided = true
                                 dragging = true
                                 totalDx = dx
                                 change.consume()
                             } else {
-                                
+
                                 decided = true
                                 break
                             }

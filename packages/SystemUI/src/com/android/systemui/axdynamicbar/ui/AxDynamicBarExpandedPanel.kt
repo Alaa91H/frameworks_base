@@ -99,7 +99,7 @@ constructor(
                     hideOverlayJob = null
                     showOverlay()
                 } else {
-                    
+
                     hideOverlayJob?.cancel()
                     hideOverlayJob =
                         applicationScope.launch {
@@ -138,12 +138,9 @@ constructor(
         val statusBarTop = windowMetrics.windowInsets
             .getInsets(WindowInsets.Type.statusBars())
             .top
-        val hasCutout = windowMetrics.windowInsets
-            .getInsets(WindowInsets.Type.displayCutout())
-            .top > 0
 
         val view = ComposeView(context).apply {
-            setContent { PlatformTheme { OverlayContent(viewModel, statusBarTop, hasCutout) } }
+            setContent { PlatformTheme { OverlayContent(viewModel, statusBarTop) } }
             setOnTouchListener { _, event ->
                 if (event.action == android.view.MotionEvent.ACTION_OUTSIDE) {
                     viewModel.statusBarExpansion.collapse()
@@ -240,16 +237,19 @@ constructor(
 }
 
 @Composable
-private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeightPx: Int, hasCutout: Boolean) {
+private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeightPx: Int) {
     val density = LocalDensity.current
     val isLargeScreen = Utilities.isLargeScreen(LocalContext.current)
 
     val largeScreenExtra = if (isLargeScreen) 4.dp else 0.dp
-    val baseTopPad = 4.dp
-    val topPad = baseTopPad + if (hasCutout) largeScreenExtra
-        else with(density) { statusBarHeightPx.toDp() } + largeScreenExtra
     val chipState by viewModel.chipState.collectAsStateWithLifecycle()
     val isExpanded by viewModel.isExpanded.collectAsStateWithLifecycle()
+    val anchorBottomPx by viewModel.cutoutAnchorBottomPx.collectAsStateWithLifecycle()
+    val centerXFraction by viewModel.chipCenterXFraction.collectAsStateWithLifecycle()
+    val topPad =
+        with(density) {
+            maxOf(statusBarHeightPx, anchorBottomPx).toDp()
+        } + 4.dp + largeScreenExtra
 
     val expandedVisible = remember { MutableTransitionState(false) }
 
@@ -264,7 +264,7 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
         }
     }
 
-    val origin = TransformOrigin(0.5f, 0f)
+    val origin = TransformOrigin(centerXFraction.coerceIn(0.05f, 0.95f), 0f)
 
     AnimatedVisibility(
         visibleState = expandedVisible,
@@ -279,19 +279,19 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
             transformOrigin = origin,
         ),
     ) {
-        
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .pointerInput(Unit) {
                     val slop = viewConfiguration.touchSlop
                     awaitEachGesture {
-                        
+
                         var ev: PointerEvent
                         do {
                             ev = awaitPointerEvent(PointerEventPass.Final)
                         } while (!ev.changes.any { it.changedToDownIgnoreConsumed() })
-                        
+
                         val downChange =
                             ev.changes.firstOrNull { it.changedToDownIgnoreConsumed() }
                                 ?: ev.changes.firstOrNull()
@@ -338,14 +338,14 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
                             indication = null,
                             onClick = {}
                         )
-                ) {                
+                ) {
                    ExpandedIslandContent(
                     events = filtered,
                     interactor = viewModel.interactor,
                     onCollapse = { viewModel.statusBarExpansion.collapse() },
                     pinnedEventId = state.event.id,
                     hapticsViewModelFactory = viewModel.interactor.sliderHapticsViewModelFactory,
-                  ) 
+                  )
                 }
             }
         }

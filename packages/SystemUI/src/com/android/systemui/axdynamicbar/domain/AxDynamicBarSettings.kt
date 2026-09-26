@@ -28,6 +28,10 @@ class AxDynamicBarSettings @Inject constructor(
         const val KEY_KEYGUARD_MUSIC_PILL_ENABLED = "ax_dynamic_bar_keyguard_music_pill"
         const val KEY_KEYGUARD_BATTERY_CHIP_MODE = "ax_dynamic_bar_keyguard_battery_chip_mode"
         const val KEY_CHIP_STYLE = "ax_dynamic_bar_chip_style"
+        const val KEY_CUTOUT_ALIGNMENT = "ax_dynamic_bar_cutout_alignment"
+        const val KEY_ISLAND_SIZE = "ax_dynamic_bar_island_size"
+        const val KEY_LANDSCAPE_MODE = "ax_dynamic_bar_landscape_mode"
+        const val KEY_DEBUG_BOUNDS = "ax_dynamic_bar_debug_bounds"
     }
 
     private val contentResolver = context.contentResolver
@@ -46,9 +50,21 @@ class AxDynamicBarSettings @Inject constructor(
 
     private val _useWaveformSeekBar = MutableStateFlow(false)
     val useWaveformSeekBar: StateFlow<Boolean> = _useWaveformSeekBar.asStateFlow()
-    
+
     private val _chipStyle = MutableStateFlow(0)
     val chipStyle: StateFlow<Int> = _chipStyle.asStateFlow()
+
+    private val _cutoutAlignment = MutableStateFlow(0)
+    val cutoutAlignment: StateFlow<Int> = _cutoutAlignment.asStateFlow()
+
+    private val _islandSize = MutableStateFlow(0)
+    val islandSize: StateFlow<Int> = _islandSize.asStateFlow()
+
+    private val _landscapeMode = MutableStateFlow(0)
+    val landscapeMode: StateFlow<Int> = _landscapeMode.asStateFlow()
+
+    private val _debugBounds = MutableStateFlow(false)
+    val debugBounds: StateFlow<Boolean> = _debugBounds.asStateFlow()
 
     private val _disabledEventTypes = MutableStateFlow<Set<String>>(emptySet())
     val disabledEventTypes: StateFlow<Set<String>> = _disabledEventTypes.asStateFlow()
@@ -106,6 +122,30 @@ class AxDynamicBarSettings @Inject constructor(
             settingsObserver,
             UserHandle.USER_ALL,
         )
+        secureSettings.registerContentObserverForUserSync(
+            KEY_CUTOUT_ALIGNMENT,
+            false,
+            settingsObserver,
+            UserHandle.USER_ALL,
+        )
+        secureSettings.registerContentObserverForUserSync(
+            KEY_ISLAND_SIZE,
+            false,
+            settingsObserver,
+            UserHandle.USER_ALL,
+        )
+        secureSettings.registerContentObserverForUserSync(
+            KEY_LANDSCAPE_MODE,
+            false,
+            settingsObserver,
+            UserHandle.USER_ALL,
+        )
+        secureSettings.registerContentObserverForUserSync(
+            KEY_DEBUG_BOUNDS,
+            false,
+            settingsObserver,
+            UserHandle.USER_ALL,
+        )
         contentResolver.registerContentObserver(
             Settings.System.getUriFor(Settings.System.MEDIA_WAVEFORM_SEEKBAR),
             false,
@@ -117,8 +157,11 @@ class AxDynamicBarSettings @Inject constructor(
     fun destroy() {
         if (!initialized) return
         initialized = false
-        secureSettings.getContentResolver().unregisterContentObserver(settingsObserver)
-        contentResolver.unregisterContentObserver(settingsObserver)
+        val secureResolver = secureSettings.getContentResolver()
+        secureResolver.unregisterContentObserver(settingsObserver)
+        if (contentResolver !== secureResolver) {
+            contentResolver.unregisterContentObserver(settingsObserver)
+        }
     }
 
     private fun refresh() {
@@ -132,6 +175,14 @@ class AxDynamicBarSettings @Inject constructor(
             secureSettings.getIntForUser(KEY_KEYGUARD_MUSIC_PILL_ENABLED, 0, UserHandle.USER_CURRENT) == 1
         _chipStyle.value =
             secureSettings.getIntForUser(KEY_CHIP_STYLE, 0, UserHandle.USER_CURRENT)
+        _cutoutAlignment.value =
+            secureSettings.getIntForUser(KEY_CUTOUT_ALIGNMENT, 0, UserHandle.USER_CURRENT)
+        _islandSize.value =
+            secureSettings.getIntForUser(KEY_ISLAND_SIZE, 0, UserHandle.USER_CURRENT)
+        _landscapeMode.value =
+            secureSettings.getIntForUser(KEY_LANDSCAPE_MODE, 0, UserHandle.USER_CURRENT)
+        _debugBounds.value =
+            secureSettings.getIntForUser(KEY_DEBUG_BOUNDS, 0, UserHandle.USER_CURRENT) == 1
         _useWaveformSeekBar.value =
             Settings.System.getIntForUser(
                 contentResolver, Settings.System.MEDIA_WAVEFORM_SEEKBAR, 0, UserHandle.USER_CURRENT,) == 1

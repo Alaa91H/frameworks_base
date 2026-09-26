@@ -142,6 +142,22 @@ constructor(
         _chipCenterXFraction.value = fraction
     }
 
+    private val _cutoutAnchorBottomPx = MutableStateFlow(0)
+    val cutoutAnchorBottomPx: StateFlow<Int> = _cutoutAnchorBottomPx.asStateFlow()
+
+    private val _hasPhysicalCutout = MutableStateFlow(false)
+    val hasPhysicalCutout: StateFlow<Boolean> = _hasPhysicalCutout.asStateFlow()
+
+    fun updateDynamicBarAnchor(
+        centerXFraction: Float,
+        bottomPx: Int,
+        hasPhysicalCutout: Boolean,
+    ) {
+        _chipCenterXFraction.value = centerXFraction.coerceIn(0f, 1f)
+        _cutoutAnchorBottomPx.value = bottomPx.coerceAtLeast(0)
+        _hasPhysicalCutout.value = hasPhysicalCutout
+    }
+
     val isExpanded: StateFlow<Boolean> = statusBarExpansion.isExpanded
 
     val isKeyguardExpanded: StateFlow<Boolean> = keyguardExpansion.isExpanded
