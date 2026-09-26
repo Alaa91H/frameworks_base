@@ -857,6 +857,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 Settings.Secure.getUriFor(Settings.Secure.IMMERSIVE_MODE_CONFIRMATIONS);
         private final Uri mDisableSecureWindowsUri =
                 Settings.Secure.getUriFor(Settings.Secure.DISABLE_SECURE_WINDOWS);
+        private final Uri mWindowIgnoreSecureUri =
+                Settings.Global.getUriFor(Settings.Global.WINDOW_IGNORE_SECURE);
         private final Uri mMagnifyImeEnabledUri = Settings.Secure.getUriFor(
                 Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MAGNIFY_NAV_AND_IME);
         private final Uri mPolicyControlUri =
@@ -900,6 +902,8 @@ public class WindowManagerService extends IWindowManager.Stub
             resolver.registerContentObserver(mImmersiveModeConfirmationsUri, false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mDisableSecureWindowsUri, false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(mWindowIgnoreSecureUri, false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mMagnifyImeEnabledUri, false, this,
                     UserHandle.USER_ALL);
@@ -963,6 +967,13 @@ public class WindowManagerService extends IWindowManager.Stub
 
             if (mDisableSecureWindowsUri.equals(uri)) {
                 updateDisableSecureWindows();
+                return;
+            }
+
+            if (mWindowIgnoreSecureUri.equals(uri)) {
+                synchronized (mGlobalLock) {
+                    mRoot.refreshSecureSurfaceState();
+                }
                 return;
             }
 
