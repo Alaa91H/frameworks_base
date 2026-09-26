@@ -18,9 +18,11 @@ package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -52,6 +54,7 @@ import com.android.systemui.qs.pipeline.shared.TileSpec
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements.toElementKey
 import com.android.systemui.res.R
 import com.android.systemui.shade.shared.flag.DualShadeFlag
+import com.android.systemui.tuner.TunerService
 import javax.inject.Inject
 import kotlinx.coroutines.launch
 
@@ -64,6 +67,7 @@ constructor(
     override val viewModelFactory: InfiniteGridViewModel.Factory,
     private val textFeedbackContentViewModelFactory: TextFeedbackContentViewModel.Factory,
     private val tileHapticsViewModelFactory: TileHapticsViewModel.Factory,
+    private val tunerService: TunerService,
 ) : PaginatableGridLayout {
 
     @Composable
@@ -87,11 +91,18 @@ constructor(
         val columns = viewModel.columnsWithMediaViewModel.columns
         val largeTilesSpan = viewModel.columnsWithMediaViewModel.largeSpan
         val largeTiles by viewModel.iconTilesViewModel.largeTilesState
-        // Tiles or largeTiles may be updated while this is composed, so listen to any changes
+        val classicStyle = rememberClassicPanelStyle()
+        // Tiles or largeTiles may be updated while this is composed, so listen to any changes.
+        // Classic mode intentionally normalizes every tile to a single grid span.
         val sizedTiles =
-            remember(tiles, largeTiles, largeTilesSpan) {
+            remember(tiles, largeTiles, largeTilesSpan, classicStyle) {
                 tiles.map {
-                    SizedTileImpl(it, if (largeTiles.contains(it.spec)) largeTilesSpan else 1)
+                    SizedTileImpl(
+                        it,
+                        if (classicStyle) 1
+                        else if (largeTiles.contains(it.spec)) largeTilesSpan
+                        else 1,
+                    )
                 }
             }
         val squishiness by viewModel.squishinessViewModel.squishiness.collectAsStateWithLifecycle()
@@ -113,7 +124,7 @@ constructor(
             Element(it.tile.spec.toElementKey(), Modifier) {
                 Tile(
                     tile = it.tile,
-                    iconOnly = iconTilesViewModel.isIconTile(it.tile.spec),
+                    iconOnly = classicStyle || iconTilesViewModel.isIconTile(it.tile.spec),
                     squishiness = { squishiness },
                     tileHapticsViewModelFactory = tileHapticsViewModelFactory,
                     coroutineScope = scope,
@@ -130,11 +141,29 @@ constructor(
                     isVisible = listening,
                     requestToggleTextFeedback = textFeedbackViewModel::requestShowFeedback,
                     enableRevealEffect = enableRevealEffect,
+                    classicStyle = classicStyle,
                 )
             }
         }
 
         TileListener(tiles, listening)
+    }
+
+    @Composable
+    private fun rememberClassicPanelStyle(): Boolean {
+        val classicStyle = remember { mutableStateOf(false) }
+
+        DisposableEffect(tunerService) {
+            val tunable =
+                TunerService.Tunable { _, newValue ->
+                    classicStyle.value =
+                        TunerService.parseInteger(newValue, PANEL_STYLE_CARD) == PANEL_STYLE_CLASSIC
+                }
+            tunerService.addTunable(tunable, QS_PANEL_STYLE)
+            onDispose { tunerService.removeTunable(tunable) }
+        }
+
+        return classicStyle.value
     }
 
     @Composable
@@ -235,4 +264,10 @@ constructor(
             }
         }
     }
+    private companion object {
+        const val QS_PANEL_STYLE = "system:qs_panel_style"
+        const val PANEL_STYLE_CARD = 0
+        const val PANEL_STYLE_CLASSIC = 1
+    }
+
 }

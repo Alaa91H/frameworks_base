@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -85,6 +86,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -114,6 +116,57 @@ private const val TEST_TAG_TILE_ICON = "qs_tile_icon"
 private const val TEST_TAG_TOGGLE = "qs_tile_toggle_target"
 private const val TEST_TAG_SMALL = "qs_tile_small"
 private const val TEST_TAG_LARGE = "qs_tile_large"
+
+@Composable
+fun ClassicTileContent(
+    label: String,
+    secondaryLabel: String?,
+    iconProvider: Context.() -> Icon,
+    colors: TileColors,
+    modifier: Modifier = Modifier,
+) {
+    val animatedBackgroundColor by
+        animateColorAsState(colors.background, label = "QSClassicTileBackgroundColor")
+    val animatedLabelColor by
+        animateColorAsState(colors.label, label = "QSClassicTileLabelColor")
+    val animatedSecondaryLabelColor by
+        animateColorAsState(colors.secondaryLabel, label = "QSClassicTileSecondaryLabelColor")
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Box(
+            modifier =
+                Modifier.size(CommonTileDefaults.TileHeight)
+                    .clip(CircleShape)
+                    .drawBehind { drawRect(animatedBackgroundColor) },
+        ) {
+            SmallTileContent(
+                iconProvider = iconProvider,
+                color = colors.icon,
+                size = { CommonTileDefaults.LargeTileIconSize },
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+
+        TileLabel(
+            text = label,
+            color = { animatedLabelColor },
+            style = MaterialTheme.typography.labelMedium.copy(textAlign = TextAlign.Center),
+            modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
+        )
+        if (!TextUtils.isEmpty(secondaryLabel)) {
+            TileLabel(
+                text = secondaryLabel ?: "",
+                color = { animatedSecondaryLabelColor },
+                style = MaterialTheme.typography.labelSmall.copy(textAlign = TextAlign.Center),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
 
 @Composable
 fun LargeTileContent(
