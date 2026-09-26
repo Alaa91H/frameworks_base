@@ -88,6 +88,9 @@ public class QRCodeScannerController implements
     public static final int QR_CODE_SCANNER_PREFERENCE_CHANGE = 1;
 
     private static final String TAG = "QRCodeScannerController";
+    private static final String GOOGLE_PLAY_SERVICES_PACKAGE = "com.google.android.gms";
+    private static final String EXTRA_FORCE_LTR_LAYOUT_DIRECTION =
+            "com.android.systemui.extra.FORCE_LTR_LAYOUT_DIRECTION";
 
     private final Context mContext;
     private final Executor mExecutor;
@@ -298,6 +301,11 @@ public class QRCodeScannerController implements
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
             if (qrCodeScannerIntentAction() && !TextUtils.isEmpty(qrCodeScannerIntentAction)) {
                 intent.setAction(qrCodeScannerIntentAction);
+            }
+
+            if (componentName != null
+                    && GOOGLE_PLAY_SERVICES_PACKAGE.equals(componentName.getPackageName())) {
+                intent.putExtra(EXTRA_FORCE_LTR_LAYOUT_DIRECTION, true);
             }
         }
 
