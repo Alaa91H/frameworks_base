@@ -1899,4 +1899,5 @@
     <string name="quick_settings_charge_control_disabled">معطّل</string>
     <string name="quick_settings_charge_control_other_mode">تلقائي أو مجدول</string>
     <string name="quick_settings_charge_control_unavailable">غير متاح</string>
+    <string name="quick_settings_charge_control_failed">تعذّر تغيير متحكّم الشحن. تحقق من وضع الشحن في الإعدادات.</string>
 </resources>
