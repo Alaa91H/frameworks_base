@@ -1902,5 +1902,5 @@
     <string name="quick_settings_charging_control_on">Aktiviert</string>
     <string name="quick_settings_charging_control_off">Deaktiviert</string>
     <string name="quick_settings_charging_control_dialog_title">Ladelimit</string>
-    <string name="quick_settings_charging_control_dialog_hint">Ladelimit zwischen 70%% und 100%% wählen. Das Speichern aktiviert den Limitmodus, ändert aber nicht die Ein/Aus-Einstellung.</string>
+    <string name="quick_settings_charging_control_dialog_hint">Ladelimit zwischen 70 und 100 Prozent wählen. Das Speichern aktiviert den Limitmodus, ändert aber nicht die Ein/Aus-Einstellung.</string>
 </resources>
