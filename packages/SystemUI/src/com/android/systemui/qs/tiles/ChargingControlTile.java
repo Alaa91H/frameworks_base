@@ -14,6 +14,7 @@ import android.service.quicksettings.Tile;
 import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.Toast;
 import android.view.ContextThemeWrapper;
 
 import com.google.android.material.slider.Slider;
@@ -170,9 +171,11 @@ public class ChargingControlTile extends SecureQSTile<BooleanState> {
             boolean expected = !controller.getEnabled();
             if (!controller.setEnabled(expected) || controller.getEnabled() != expected) {
                 Log.w(TAG, "Charging control rejected enable=" + expected);
+                showOperationFailed();
             }
         } catch (RuntimeException e) {
             Log.e(TAG, "Unable to toggle charging control", e);
+            showOperationFailed();
         }
         refreshState();
     }
@@ -200,7 +203,15 @@ public class ChargingControlTile extends SecureQSTile<BooleanState> {
         HealthInterface controller = health();
         if (controller == null) return;
 
-        if (controller.getMode() != HealthInterface.MODE_LIMIT) {
+        final int selectedMode;
+        try {
+            selectedMode = controller.getMode();
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Unable to read charging control mode", e);
+            refreshState();
+            return;
+        }
+        if (selectedMode != HealthInterface.MODE_LIMIT) {
             // Avoid changing modes implicitly: not every vendor health HAL
             // supports MODE_LIMIT even when some charging control is available.
             super.handleLongClick(null);
@@ -209,7 +220,15 @@ public class ChargingControlTile extends SecureQSTile<BooleanState> {
 
         mMainHandler.post(() -> {
             HealthInterface current = health();
-            if (current == null || current.getMode() != HealthInterface.MODE_LIMIT) return;
+            if (current == null) return;
+            final int currentLimit;
+            try {
+                if (current.getMode() != HealthInterface.MODE_LIMIT) return;
+                currentLimit = current.getLimit();
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Unable to read charging limit", e);
+                return;
+            }
             final SystemUIDialog dialog = mDialogFactory.create();
             dialog.setTitle(R.string.quick_settings_charge_control_limit_title);
 
@@ -235,7 +254,7 @@ public class ChargingControlTile extends SecureQSTile<BooleanState> {
             slider.setStepSize(1f);
             slider.setTickVisible(false);
             slider.setLabelFormatter(level -> Math.round(level) + "%");
-            int start = clampLimit(current.getLimit());
+            int start = clampLimit(currentLimit);
             slider.setValue(start);
             value.setText(start + "%");
             slider.addOnChangeListener((bar, progress, fromUser) ->
@@ -245,16 +264,29 @@ public class ChargingControlTile extends SecureQSTile<BooleanState> {
 
             dialog.setPositiveButton(R.string.quick_settings_done, (d, which) -> {
                 HealthInterface latest = health();
-                if (latest == null || latest.getMode() != HealthInterface.MODE_LIMIT) return;
+                if (latest == null) return;
                 int selected = clampLimit(Math.round(slider.getValue()));
-                if (!latest.setLimit(selected) || latest.getLimit() != selected) {
-                    Log.w(TAG, "Charging limit write failed: " + selected);
+                try {
+                    if (latest.getMode() != HealthInterface.MODE_LIMIT
+                            || !latest.setLimit(selected)
+                            || latest.getLimit() != selected) {
+                        Log.w(TAG, "Charging limit write was not accepted: " + selected);
+                        showOperationFailed();
+                    }
+                } catch (RuntimeException e) {
+                    Log.e(TAG, "Unable to update charging limit", e);
+                    showOperationFailed();
                 }
                 refreshState();
             });
             dialog.setNegativeButton(android.R.string.cancel, null);
             dialog.show();
         });
+    }
+
+    private void showOperationFailed() {
+        mMainHandler.post(() -> Toast.makeText(mContext,
+                R.string.quick_settings_charge_control_failed, Toast.LENGTH_SHORT).show());
     }
 
     static int clampLimit(int limit) {
@@ -270,9 +302,23 @@ public class ChargingControlTile extends SecureQSTile<BooleanState> {
     protected void handleUpdateState(BooleanState state, Object arg) {
         HealthInterface controller = health();
         boolean available = controller != null;
-        boolean enabled = available && controller.getEnabled();
+        boolean enabled = false;
+        int mode = HealthInterface.MODE_NONE;
+        int currentLimit = 0;
+        if (available) {
+            try {
+                enabled = controller.getEnabled();
+                mode = controller.getMode();
+                if (mode == HealthInterface.MODE_LIMIT) {
+                    currentLimit = controller.getLimit();
+                }
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Unable to read charging control state", e);
+                available = false;
+            }
+        }
 
-        state.value = enabled;
+        state.value = available && enabled;
         state.state = !available ? Tile.STATE_UNAVAILABLE
                 : enabled ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
         state.handlesLongClick = available;
@@ -282,11 +328,11 @@ public class ChargingControlTile extends SecureQSTile<BooleanState> {
         if (!available) {
             state.secondaryLabel = mContext.getString(
                     R.string.quick_settings_charge_control_unavailable);
-        } else if (controller.getMode() == HealthInterface.MODE_LIMIT) {
+        } else if (mode == HealthInterface.MODE_LIMIT) {
             state.secondaryLabel = (enabled
                     ? mContext.getString(R.string.quick_settings_charge_control_enabled)
                     : mContext.getString(R.string.quick_settings_charge_control_disabled))
-                    + " · " + clampLimit(controller.getLimit()) + "%";
+                    + " · " + currentLimit + "%";
         } else {
             state.secondaryLabel = mContext.getString(
                     enabled ? R.string.quick_settings_charge_control_other_mode
