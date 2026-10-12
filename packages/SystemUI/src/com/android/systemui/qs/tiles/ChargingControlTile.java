@@ -67,6 +67,7 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
     private final DialogTransitionAnimator mDialogTransitionAnimator;
     private final ContentObserver mSettingsObserver;
     private boolean mObserving;
+    @Nullable private SystemUIDialog mLimitDialog;
 
     @Inject
     public ChargingControlTile(
@@ -142,6 +143,13 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
 
     @Override
     protected void handleDestroy() {
+        // A QS panel recreation must not leave a stale window attached to SystemUI.
+        mMainHandler.post(() -> {
+            if (mLimitDialog != null) {
+                mLimitDialog.dismiss();
+                mLimitDialog = null;
+            }
+        });
         if (mObserving) {
             mContext.getContentResolver().unregisterContentObserver(mSettingsObserver);
             mObserving = false;
@@ -208,8 +216,13 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
 
     private void showLimitDialog(@Nullable Expandable expandable, int initialLimit) {
         if (!isAvailable()) return;
+        if (mLimitDialog != null && mLimitDialog.isShowing()) return;
 
         SystemUIDialog dialog = mDialogFactory.create();
+        mLimitDialog = dialog;
+        dialog.setOnDismissListener(ignored -> {
+            if (mLimitDialog == dialog) mLimitDialog = null;
+        });
         dialog.setTitle(R.string.quick_settings_charging_control_dialog_title);
 
         final int padding = (int) (20 * mContext.getResources()
