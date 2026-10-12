@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qs_charging_control_label">Charging control</string>
+    <string name="qs_charging_control_dialog_title">Charging limit</string>
+    <string name="qs_charging_control_percent">%1$d%%</string>
+    <string name="qs_charging_control_mode_notice">Applying a new limit switches charging control to percentage limit mode. Use the tile to enable or disable charging control.</string>
+    <string name="qs_charging_control_other_mode">Automatic or scheduled mode</string>
+    <string name="qs_charging_control_unavailable">Not supported</string>
+    <string name="qs_charging_control_error">Could not update charging control</string>
+</resources>
