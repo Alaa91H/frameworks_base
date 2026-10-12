@@ -5075,4 +5075,5 @@
     <string name="quick_settings_charging_control_dialog_title">Charge limit</string>
     <string name="quick_settings_charging_control_dialog_hint">Choose a charge limit between 70 and 100 percent. Saving selects limit mode without changing whether charging control is enabled.</string>
     <string name="quick_settings_charging_control_active_limit">Charging · %1$d%%</string>
+    <string name="quick_settings_charging_control_error">Charging control could not apply this change</string>
 </resources>
