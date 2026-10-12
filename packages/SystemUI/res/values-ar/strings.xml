@@ -1904,4 +1904,5 @@
     <string name="quick_settings_charging_control_dialog_title">حد الشحن</string>
     <string name="quick_settings_charging_control_dialog_hint">اختر حد الشحن بين 70 و100 بالمئة. يؤدي الحفظ إلى اختيار وضع الحد دون تغيير حالة تفعيل متحكم الشحن.</string>
     <string name="quick_settings_charging_control_active_limit">الشحن · %1$d%%</string>
+    <string name="quick_settings_charging_control_error">تعذّر تطبيق إعداد متحكم الشحن</string>
 </resources>
