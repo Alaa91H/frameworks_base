@@ -18,6 +18,7 @@ import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 
@@ -159,6 +160,11 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
         }
     }
 
+    private void showError() {
+        mMainHandler.post(() -> Toast.makeText(mContext,
+                R.string.quick_settings_charging_control_error, Toast.LENGTH_SHORT).show());
+    }
+
     @Override
     protected void handleClick(@Nullable Expandable expandable) {
         HealthInterface health = health();
@@ -168,9 +174,11 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
             final boolean wanted = !health.getEnabled();
             if (!health.setEnabled(wanted) || health.getEnabled() != wanted) {
                 Log.w(TAG, "Charging control rejected enable state " + wanted);
+                showError();
             }
         } catch (RuntimeException exception) {
             Log.e(TAG, "Charging control toggle failed", exception);
+            showError();
         }
         refreshState();
     }
@@ -268,16 +276,19 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
             if (oldMode != HealthInterface.MODE_LIMIT
                     && !health.setMode(HealthInterface.MODE_LIMIT)) {
                 Log.w(TAG, "Limit mode is not supported by this device");
+                showError();
                 refreshState();
                 return;
             }
             if (!health.setLimit(requested) || health.getLimit() != requested) {
                 Log.w(TAG, "Charge limit " + requested + "% was rejected");
+                showError();
                 if (oldLimit >= 0 && oldLimit <= 100) health.setLimit(oldLimit);
                 if (oldMode != HealthInterface.MODE_LIMIT) health.setMode(oldMode);
             }
         } catch (RuntimeException exception) {
             Log.e(TAG, "Unable to configure charging limit", exception);
+            showError();
         }
         refreshState();
     }
