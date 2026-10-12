@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qs_charging_control_label">Ladebegrenzung</string>
+    <string name="qs_charging_control_dialog_title">Ladelimit</string>
+    <string name="qs_charging_control_percent">%1$d%%</string>
+    <string name="qs_charging_control_mode_notice">Ein neues Limit aktiviert den Prozentgrenzmodus. Durch Tippen auf die Kachel wird die Ladesteuerung ein- oder ausgeschaltet.</string>
+    <string name="qs_charging_control_other_mode">Automatisch oder zeitgesteuert</string>
+    <string name="qs_charging_control_unavailable">Nicht unterstützt</string>
+    <string name="qs_charging_control_error">Ladesteuerung konnte nicht geändert werden</string>
+</resources>
