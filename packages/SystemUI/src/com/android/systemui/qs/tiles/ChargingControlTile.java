@@ -39,8 +39,6 @@ import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.res.R;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
 
-import dagger.Lazy;
-
 import lineageos.health.HealthInterface;
 import lineageos.providers.LineageSettings;
 
@@ -322,9 +320,15 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
             state.value = health.getEnabled();
             int mode = health.getMode();
             if (mode == HealthInterface.MODE_LIMIT) {
+                int limit = clampLimit(health.getLimit());
                 state.secondaryLabel = mContext.getString(
-                        R.string.quick_settings_charging_control_limit,
-                        clampLimit(health.getLimit()));
+                        R.string.quick_settings_charging_control_limit, limit);
+                // Compact QS layouts can hide the secondary label. Keep the
+                // selected charge cap visible in the primary label while on.
+                if (state.value) {
+                    state.label = mContext.getString(
+                            R.string.quick_settings_charging_control_active_limit, limit);
+                }
             } else if (mode == HealthInterface.MODE_AUTO) {
                 state.secondaryLabel =
                         mContext.getString(R.string.quick_settings_charging_control_automatic);
