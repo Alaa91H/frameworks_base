@@ -69,6 +69,7 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
     private static final int MAX_LIMIT = 100;
 
     private final Handler mMainHandler;
+    private final SystemUIDialog.Factory mDialogFactory;
     private final ContentResolver mResolver;
     private final ContentObserver mSettingsObserver;
     @Nullable private SystemUIDialog mLimitDialog;
@@ -84,11 +85,13 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
             MetricsLogger metricsLogger,
             StatusBarStateController statusBarStateController,
             ActivityStarter activityStarter,
-            QSLogger qsLogger
+            QSLogger qsLogger,
+            SystemUIDialog.Factory dialogFactory
     ) {
         super(host, uiEventLogger, backgroundLooper, mainHandler, falsingManager, metricsLogger,
                 statusBarStateController, activityStarter, qsLogger);
         mMainHandler = mainHandler;
+        mDialogFactory = dialogFactory;
         mResolver = mContext.getContentResolver();
         mSettingsObserver = new ContentObserver(mHandler) {
             @Override
@@ -188,7 +191,7 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
     private void showLimitDialog(int currentLimit) {
         if (mLimitDialog != null && mLimitDialog.isShowing()) return;
 
-        SystemUIDialog dialog = new SystemUIDialog(mContext);
+        SystemUIDialog dialog = mDialogFactory.create();
         mLimitDialog = dialog;
         dialog.setTitle(R.string.qs_charging_control_dialog_title);
 
