@@ -5064,4 +5064,11 @@
     <!-- Accessibility label for the thumbs down button on attribution dialog. [CHAR_LIMIT=NONE] -->
     <string name="ace_attribution_thumbs_down_button_accessibility_description">Thumbs down feedback button</string>
 
+    <!-- Lineage Health charging-control Quick Settings tile. -->
+    <string name="quick_settings_charge_control_label">Charging control</string>
+    <string name="quick_settings_charge_control_limit_title">Charging limit</string>
+    <string name="quick_settings_charge_control_enabled">On</string>
+    <string name="quick_settings_charge_control_disabled">Off</string>
+    <string name="quick_settings_charge_control_other_mode">Automatic or scheduled</string>
+    <string name="quick_settings_charge_control_unavailable">Unavailable</string>
 </resources>
