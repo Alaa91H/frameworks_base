@@ -581,6 +581,7 @@ android_library {
         "uilatencystats_flags_core_java_lib",
         "personalcontext_ace_visualizer",
         "vendor.lineage.powershare-V1-java",
+        "org.lineageos.platform.internal",
         "FadingEdgeLayoutLib",
     ],
     enable_ksp: true,

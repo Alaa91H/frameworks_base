@@ -5064,4 +5064,16 @@
     <!-- Accessibility label for the thumbs down button on attribution dialog. [CHAR_LIMIT=NONE] -->
     <string name="ace_attribution_thumbs_down_button_accessibility_description">Thumbs down feedback button</string>
 
+    <!-- Charging control Quick Settings tile -->
+    <string name="quick_settings_charging_control_label">Charging control</string>
+    <string name="quick_settings_charging_control_limit">%1$d%% limit</string>
+    <string name="quick_settings_charging_control_automatic">Automatic</string>
+    <string name="quick_settings_charging_control_scheduled">Scheduled</string>
+    <string name="quick_settings_charging_control_unavailable">Unavailable</string>
+    <string name="quick_settings_charging_control_on">On</string>
+    <string name="quick_settings_charging_control_off">Off</string>
+    <string name="quick_settings_charging_control_dialog_title">Charge limit</string>
+    <string name="quick_settings_charging_control_dialog_hint">Choose a charge limit between 70 and 100 percent. Saving selects limit mode without changing whether charging control is enabled.</string>
+    <string name="quick_settings_charging_control_active_limit">Charging · %1$d%%</string>
+    <string name="quick_settings_charging_control_error">Charging control could not apply this change</string>
 </resources>
