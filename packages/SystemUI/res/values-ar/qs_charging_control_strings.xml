@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qs_charging_control_label">متحكّم الشحن</string>
+    <string name="qs_charging_control_dialog_title">حدّ الشحن</string>
+    <string name="qs_charging_control_percent">%1$d%%</string>
+    <string name="qs_charging_control_mode_notice">اختيار حد جديد يحوّل وضع التحكم بالشحن إلى حد النسبة المئوية. اضغط المربع لتفعيل المتحكم أو تعطيله.</string>
+    <string name="qs_charging_control_other_mode">الوضع التلقائي أو المجدول</string>
+    <string name="qs_charging_control_unavailable">غير مدعوم</string>
+    <string name="qs_charging_control_error">تعذّر تحديث متحكّم الشحن</string>
+</resources>
