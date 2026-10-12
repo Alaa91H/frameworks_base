@@ -1899,4 +1899,5 @@
     <string name="quick_settings_charge_control_disabled">Aus</string>
     <string name="quick_settings_charge_control_other_mode">Automatisch oder geplant</string>
     <string name="quick_settings_charge_control_unavailable">Nicht verfügbar</string>
+    <string name="quick_settings_charge_control_failed">Ladesteuerung konnte nicht geändert werden. Lade-Modus in den Einstellungen prüfen.</string>
 </resources>
