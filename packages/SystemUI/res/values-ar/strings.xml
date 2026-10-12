@@ -1893,4 +1893,10 @@
     <string name="ace_attribution_settings_button_accessibility_description" msgid="8426163772933746374">"زرّ الإعدادات"</string>
     <string name="ace_attribution_thumbs_up_button_accessibility_description" msgid="3561722934830934360">"زر إرسال الملاحظات \"يعجبني\""</string>
     <string name="ace_attribution_thumbs_down_button_accessibility_description" msgid="5471283747650437662">"زر إرسال الملاحظات \"لا يعجبني\""</string>
+    <string name="quick_settings_charge_control_label">متحكّم الشحن</string>
+    <string name="quick_settings_charge_control_limit_title">حد الشحن</string>
+    <string name="quick_settings_charge_control_enabled">مفعّل</string>
+    <string name="quick_settings_charge_control_disabled">معطّل</string>
+    <string name="quick_settings_charge_control_other_mode">تلقائي أو مجدول</string>
+    <string name="quick_settings_charge_control_unavailable">غير متاح</string>
 </resources>
