@@ -14,7 +14,9 @@ import android.service.quicksettings.Tile;
 import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
-import android.widget.SeekBar;
+import android.view.ContextThemeWrapper;
+
+import com.google.android.material.slider.Slider;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
@@ -201,8 +203,7 @@ public class ChargingControlTile extends SecureQSTile<BooleanState> {
         if (controller.getMode() != HealthInterface.MODE_LIMIT) {
             // Avoid changing modes implicitly: not every vendor health HAL
             // supports MODE_LIMIT even when some charging control is available.
-            mActivityStarter.postStartActivityDismissingKeyguard(
-                    getLongClickIntent(), 0);
+            super.handleLongClick(null);
             return;
         }
 
@@ -223,27 +224,29 @@ public class ChargingControlTile extends SecureQSTile<BooleanState> {
             value.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
             layout.addView(value);
 
-            SeekBar seek = new SeekBar(dialog.getContext());
-            seek.setMax(MAX_LIMIT - MIN_LIMIT);
+            // Use the same Material 3 slider visual treatment as the flashlight
+            // intensity dialog. Don't change the HAL while dragging.
+            ContextThemeWrapper themedContext = new ContextThemeWrapper(
+                    dialog.getContext(),
+                    com.google.android.material.R.style.Theme_Material3_DynamicColors_DayNight);
+            Slider slider = new Slider(themedContext);
+            slider.setValueFrom(MIN_LIMIT);
+            slider.setValueTo(MAX_LIMIT);
+            slider.setStepSize(1f);
+            slider.setTickVisible(false);
+            slider.setLabelFormatter(level -> Math.round(level) + "%");
             int start = clampLimit(current.getLimit());
-            seek.setProgress(start - MIN_LIMIT);
+            slider.setValue(start);
             value.setText(start + "%");
-            seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override
-                public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                    value.setText((MIN_LIMIT + progress) + "%");
-                }
-
-                @Override public void onStartTrackingTouch(SeekBar bar) {}
-                @Override public void onStopTrackingTouch(SeekBar bar) {}
-            });
-            layout.addView(seek);
+            slider.addOnChangeListener((bar, progress, fromUser) ->
+                    value.setText(Math.round(progress) + "%"));
+            layout.addView(slider);
             dialog.setView(layout);
 
             dialog.setPositiveButton(R.string.quick_settings_done, (d, which) -> {
                 HealthInterface latest = health();
                 if (latest == null || latest.getMode() != HealthInterface.MODE_LIMIT) return;
-                int selected = clampLimit(MIN_LIMIT + seek.getProgress());
+                int selected = clampLimit(Math.round(slider.getValue()));
                 if (!latest.setLimit(selected) || latest.getLimit() != selected) {
                     Log.w(TAG, "Charging limit write failed: " + selected);
                 }
