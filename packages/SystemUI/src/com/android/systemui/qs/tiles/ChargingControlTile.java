@@ -190,6 +190,13 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
 
         final int currentLimit;
         try {
+            // Match the stock LineageParts UI. Devices without fine-grained
+            // charging limits should use the native settings screen instead
+            // of being shown a percentage control the HAL cannot apply.
+            if (!health.allowFineGrainedSettings()) {
+                super.handleLongClick(expandable);
+                return;
+            }
             currentLimit = clampLimit(health.getLimit());
         } catch (RuntimeException exception) {
             Log.w(TAG, "Unable to read charge limit", exception);
@@ -269,9 +276,15 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
         if (health == null || requested < MIN_CHARGE_LIMIT
                 || requested > MAX_CHARGE_LIMIT) return;
 
+        final int oldMode;
+        final int oldLimit;
         try {
-            final int oldMode = health.getMode();
-            final int oldLimit = health.getLimit();
+            if (!health.allowFineGrainedSettings()) {
+                showError();
+                return;
+            }
+            oldMode = health.getMode();
+            oldLimit = health.getLimit();
             // Set limit mode first so the selected percentage is meaningful.
             if (oldMode != HealthInterface.MODE_LIMIT
                     && !health.setMode(HealthInterface.MODE_LIMIT)) {
@@ -280,7 +293,8 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
                 refreshState();
                 return;
             }
-            if (!health.setLimit(requested) || health.getLimit() != requested) {
+            if (health.getMode() != HealthInterface.MODE_LIMIT
+                    || !health.setLimit(requested) || health.getLimit() != requested) {
                 Log.w(TAG, "Charge limit " + requested + "% was rejected");
                 showError();
                 if (oldLimit >= 0 && oldLimit <= 100) health.setLimit(oldLimit);
@@ -343,9 +357,16 @@ public class ChargingControlTile extends QSTileImpl<BooleanState> {
             } else if (mode == HealthInterface.MODE_AUTO) {
                 state.secondaryLabel =
                         mContext.getString(R.string.quick_settings_charging_control_automatic);
-            } else {
+            } else if (mode == HealthInterface.MODE_MANUAL) {
                 state.secondaryLabel =
                         mContext.getString(R.string.quick_settings_charging_control_scheduled);
+            } else {
+                state.value = false;
+                state.state = Tile.STATE_UNAVAILABLE;
+                state.secondaryLabel =
+                        mContext.getString(R.string.quick_settings_charging_control_unavailable);
+                state.contentDescription = state.label;
+                return;
             }
             state.state = state.value ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
             state.contentDescription = state.label + ", " + state.secondaryLabel
